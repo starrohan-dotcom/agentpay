@@ -37,7 +37,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_USERNAME/agentpay.git"
+    "url": "https://github.com/Starrohan/agentpay.git"
   },
   "peerDependencies": {
     "viem": "^2.0.0"
