@@ -1,146 +1,230 @@
-# AgentPay 💸🤖
+# @starrohan/agentpay
 
-Autonomous agent wallets with built-in spending policies for Ethereum. Let your AI agents pay — but never overspend.
+> The wallet protocol for AI agents. Give any AI agent a crypto wallet, spending limits, and transaction history in 3 lines of code.
 
-## What is AgentPay?
+[![npm version](https://img.shields.io/npm/v/@starrohan/agentpay)](https://www.npmjs.com/package/@starrohan/agentpay)
+[![license](https://img.shields.io/npm/l/@starrohan/agentpay)](LICENSE)
+[![built on Base](https://img.shields.io/badge/built%20on-Base-0052FF)](https://base.org)
 
-AgentPay gives every AI agent its own Ethereum wallet with **programmable spending limits**. Your agent can make payments autonomously, but policy rules prevent runaway spending.
+---
 
-### Key Features
+## The problem
 
-- 🤖 **Autonomous Payments** — agents send ETH without human approval
-- 🛡️ **Spending Policies** — per-transaction caps, daily limits, address whitelists
-- 📊 **Transaction Tracking** — full history with memos, timestamps, and status
-- ⚠️ **Large Payment Warnings** — configurable alerts for big transactions
-- 🔧 **Fluent Policy Builder** — clean API for defining spending rules
+AI agents can think. They can't pay.
 
-## Quickstart
+Millions of agents are being deployed to do real work — browse the web, call APIs, hire services. But every one hits the same wall: **no way to handle money autonomously.**
 
-### 1. Install
+AgentPay fixes that.
+
+---
+
+## Install
 
 ```bash
 npm install @starrohan/agentpay
 ```
 
-### 2. Create an Agent Wallet
+---
+
+## Quickstart — 3 lines
 
 ```ts
 import { AgentWallet, policy } from "@starrohan/agentpay";
 
 const agent = new AgentWallet({
-  privateKey: process.env.AGENT_PRIVATE_KEY!,  // your wallet private key
-  agentId: "research-agent-01",                // give your agent a name
-
-  policy: policy()
-    .maxTx(0.00005)       // max 0.00005 ETH per transaction
-    .dailyLimit(0.0002)   // max 0.0002 ETH per day total
-    .warnAbove(0.00003)   // log warning for large payments
-    .build()
-});
-```
-
-### 3. Check Balance
-
-```ts
-const balance = await agent.balance();
-console.log("Agent balance:", balance, "ETH");
-```
-
-### 4. Send a Payment
-
-```ts
-const tx = await agent.pay({
-  to: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
-  amount: 0.00001,
-  memo: "paying for weather API call"
+  privateKey: "0xYOUR_PRIVATE_KEY",
+  agentId: "my-agent",
+  policy: policy().maxTx(0.001).dailyLimit(0.01).build()
 });
 
-console.log("Transaction:", tx.hash);
+await agent.pay({ to: "0xRECIPIENT", amount: 0.00001, memo: "API call" });
 ```
 
-### 5. Policy Violations Are Caught
+That's it. Your agent now has a wallet, spending limits, and a full transaction history.
 
-```ts
-try {
-  await agent.pay({
-    to: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F",
-    amount: 99,  // way over the maxTx limit!
-    memo: "this will be blocked"
-  });
-} catch (err) {
-  console.log(err.message);
-  // [AgentPay] Policy violation: tx amount 99 ETH exceeds maxTxAmount 0.00005 ETH
-}
-```
+---
 
-### 6. View Summary & History
+## Features
 
-```ts
-await agent.summary();
-// [AgentPay] ── research-agent-01 Summary ──
-//   Address:      0x5908...
-//   Balance:      0.000079 ETH
-//   Spent today:  0.00001 ETH
-//   Transactions: 1
-//   Daily limit:  0.0002 ETH (5.0% used)
+- 💳 **Autonomous payments** — agent sends crypto with no human clicking anything
+- 🛡️ **Spending policy** — set max per transaction, daily limits, and recipient allowlists — enforced in code
+- 📋 **Transaction history** — every payment logged with timestamp, memo, and status
+- 📊 **Daily spend tracker** — know exactly how much your agent spent today
+- ⚡ **Base L2** — sub-second settlement, near-zero gas fees (~$0.000001 per tx)
+- 🔌 **Framework agnostic** — works with LangChain, AutoGen, CrewAI, or any agent
 
-const history = agent.history();
-```
+---
 
-## Policy Builder API
+## API Reference
 
-```ts
-const rules = policy()
-  .maxTx(0.001)              // max per single transaction (ETH)
-  .dailyLimit(0.01)          // max total spend per day (ETH)
-  .allowOnly([               // whitelist of allowed recipient addresses
-    "0x1234...",
-    "0x5678..."
-  ])
-  .warnAbove(0.0005)         // log warning if tx exceeds this amount
-  .build();
-```
-
-| Method | Description |
-|--------|-------------|
-| `maxTx(amount)` | Maximum ETH per single transaction |
-| `dailyLimit(amount)` | Maximum total ETH spent per day |
-| `allowOnly(addresses)` | Only allow payments to these addresses |
-| `warnAbove(amount)` | Log a warning for payments above this amount |
-
-## Running the Example
-
-```bash
-# Clone the repo
-git clone https://github.com/starrohan-dotcom/agentpay.git
-cd agentpay
-
-# Install dependencies
-npm install
-
-# Set your private key
-export AGENT_PRIVATE_KEY=0xYOUR_PRIVATE_KEY
-
-# Run the example
-npx tsx example.ts
-```
-
-## Network
-
-AgentPay currently runs on **Base Sepolia** testnet. Get free testnet ETH from:
-- https://faucet.quicknode.com/base/sepolia
-- https://www.coinbase.com/faucets/base-ethereum-goerli-faucet
-
-## Security
-
-⚠️ **Never commit your private key to git.** Always use environment variables:
+### `new AgentWallet(config)`
 
 ```ts
 const agent = new AgentWallet({
-  privateKey: process.env.AGENT_PRIVATE_KEY!,
-  // ...
+  privateKey: "0x...",     // agent's wallet private key
+  agentId: "my-agent",    // optional human-readable name
+  policy: SpendingPolicy, // optional spending rules
+  rpcUrl: "https://...",  // optional custom RPC (default: Base Sepolia)
 });
 ```
+
+---
+
+### `policy()` — spending policy builder
+
+```ts
+const rules = policy()
+  .maxTx(0.001)                          // max 0.001 ETH per transaction
+  .dailyLimit(0.01)                      // max 0.01 ETH per day
+  .allowOnly(["0xABC...", "0xDEF..."])   // whitelist of allowed recipients
+  .warnAbove(0.0005)                     // log warning for large payments
+  .build();
+```
+
+---
+
+### `agent.pay(opts)` → `TxRecord`
+
+```ts
+const tx = await agent.pay({
+  to: "0xRECIPIENT_ADDRESS",
+  amount: 0.00001,           // in ETH
+  memo: "weather API call",  // optional label
+});
+
+console.log(tx.hash);      // transaction hash
+console.log(tx.status);    // "success" | "failed"
+console.log(tx.timestamp); // Date
+```
+
+Policy violations throw immediately — the payment never goes out:
+
+```
+Error: [AgentPay] Policy violation: tx amount 99 ETH exceeds maxTxAmount 0.001 ETH
+```
+
+---
+
+### `agent.balance()` → `string`
+
+```ts
+const bal = await agent.balance();
+console.log(bal); // "0.000079 ETH"
+```
+
+---
+
+### `agent.history()` → `TxRecord[]`
+
+```ts
+const txs = agent.history();
+// [{ hash, to, amount, memo, timestamp, status }, ...]
+```
+
+---
+
+### `agent.dailySpentSoFar()` → `number`
+
+```ts
+const spent = agent.dailySpentSoFar();
+console.log(`Agent spent ${spent} ETH today`);
+```
+
+---
+
+### `agent.summary()`
+
+Prints a full summary to console:
+
+```
+[AgentPay] ── my-agent Summary ──
+  Address:      0x5908AE35...
+  Balance:      0.000079 ETH
+  Spent today:  0.00001 ETH
+  Transactions: 1
+  Daily limit:  0.01 ETH (0.1% used)
+```
+
+---
+
+## Real example output
+
+```bash
+Agent balance: 0.000089873993838909 ETH
+[AgentPay] my-agent paying 0.00001 ETH to 0x71C7... (paying for weather API call)...
+[AgentPay] ✅ Payment sent!
+[AgentPay] 🔗 https://sepolia.basescan.org/tx/0x8be8d2...
+
+Policy blocked the payment: tx amount 99 ETH exceeds maxTxAmount 0.00001 ETH
+
+[AgentPay] ── my-agent Summary ──
+  Address:      0x5908AE35d80D3c69F702b1cbC8dfC1bE0D3A064B
+  Balance:      0.000079 ETH
+  Spent today:  0.00001 ETH
+  Transactions: 1
+  Daily limit:  0.0002 ETH (5.0% used)
+```
+
+---
+
+## Use with LangChain
+
+```ts
+import { AgentWallet, policy } from "@starrohan/agentpay";
+import { Tool } from "langchain/tools";
+
+class AgentPayTool extends Tool {
+  name = "agent_wallet";
+  description = `Pay for services or check balance.
+    Input JSON: { "action": "pay"|"balance", "to": "0x...", "amount": 0.00001 }`;
+
+  constructor(private wallet: AgentWallet) { super(); }
+
+  async _call(input: string): Promise<string> {
+    const { action, to, amount } = JSON.parse(input);
+    if (action === "pay") {
+      const tx = await this.wallet.pay({ to, amount });
+      return `Paid ${amount} ETH to ${to}. Tx: ${tx.hash}`;
+    }
+    const bal = await this.wallet.balance();
+    return `Balance: ${bal} ETH`;
+  }
+}
+
+// Drop into any LangChain agent:
+// const tool = new AgentPayTool(agent);
+```
+
+---
+
+## Network
+
+Currently running on **Base Sepolia testnet**. Mainnet support coming in v0.2.
+
+Get free testnet ETH: [coinbase.com/faucets/base-ethereum-sepolia-faucet](https://coinbase.com/faucets/base-ethereum-sepolia-faucet)
+
+---
+
+## Roadmap
+
+- [x] AgentWallet class with pay, balance, history
+- [x] Spending policy engine (maxTx, dailyLimit, allowlist)
+- [x] Base Sepolia testnet
+- [ ] LangChain / AutoGen / CrewAI plugins
+- [ ] Base mainnet + USDC support
+- [ ] Smart contract policy enforcement (on-chain)
+- [ ] Enterprise dashboard
+- [ ] Agent-to-agent payments
+
+---
+
+## Built by
+
+[@starrohan](https://github.com/starrohan) — building the economic infrastructure for AI agents.
+
+Follow the journey on X: **@starrohan**
+
+---
 
 ## License
 
