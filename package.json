@@ -1,0 +1,50 @@
+{
+  "name": "agentpay",
+  "version": "1.0.0",
+  "description": "Autonomous agent wallets with built-in spending policies for Ethereum",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "example": "tsx example.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ethereum",
+    "agent",
+    "wallet",
+    "autonomous",
+    "spending",
+    "policy",
+    "viem",
+    "base",
+    "web3",
+    "crypto"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/agentpay.git"
+  },
+  "peerDependencies": {
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "viem": "^2.48.8"
+  }
+}
