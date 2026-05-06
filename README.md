@@ -112,7 +112,7 @@ const rules = policy()
 
 ```bash
 # Clone the repo
-git clone https://github.com/Starrohan/agentpay.git
+git clone https://github.com/starrohan-dotcom/agentpay.git
 cd agentpay
 
 # Install dependencies
