@@ -220,7 +220,7 @@ Get free testnet ETH: [coinbase.com/faucets/base-ethereum-sepolia-faucet](https:
 
 ## Built by
 
-[@starrohan](https://github.com/starrohan) — building the economic infrastructure for AI agents.
+[@starrohan-dotcom](https://github.com/starrohan) — building the economic infrastructure for AI agents.
 
 Follow the journey on X: **@starrohan**
 
