@@ -1,5 +1,5 @@
 {
-  "name": "agentpay",
+  "name": "@starrohan/agentpay",
   "version": "1.0.0",
   "description": "Autonomous agent wallets with built-in spending policies for Ethereum",
   "main": "./dist/index.js",

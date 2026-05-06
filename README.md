@@ -19,13 +19,13 @@ AgentPay gives every AI agent its own Ethereum wallet with **programmable spendi
 ### 1. Install
 
 ```bash
-npm install agentpay
+npm install @starrohan/agentpay
 ```
 
 ### 2. Create an Agent Wallet
 
 ```ts
-import { AgentWallet, policy } from "agentpay";
+import { AgentWallet, policy } from "@starrohan/agentpay";
 
 const agent = new AgentWallet({
   privateKey: process.env.AGENT_PRIVATE_KEY!,  // your wallet private key
