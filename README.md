@@ -108,7 +108,9 @@ Error: [AgentPay] Policy violation: tx amount 99 ETH exceeds maxTxAmount 0.001 E
 
 ## Security
 
-- ✅ **Persistent state** — daily limits and transaction history survive agent restarts
+- ✅ **Persistent state** — daily limits and transaction history survive agent restarts (supports File, Redis, or SQL)
+- ✅ **Smart Accounts (ERC-7579)** — optional on-chain wallet for "un-hackable" security
+- ✅ **USDC Support** — native stablecoin payments on Base
 - ✅ **BigInt math** — all internal calculations use Wei for absolute precision (no floating-point errors)
 - ✅ **Environment variables** — secure private key management via `.env` support
 - ✅ **Policy enforcement** — autonomous guardrails that cannot be bypassed by agent logic
@@ -227,9 +229,9 @@ const agent = new AgentWallet({
 - [x] Spending policy engine (maxTx, dailyLimit, allowlist)
 - [x] Base Sepolia testnet
 - [x] Persistent state & BigInt precision (v1.1.1)
+- [x] USDC support (v1.2.0)
+- [x] Smart Account (ERC-7579) integration (v1.2.0)
 - [ ] LangChain / AutoGen / CrewAI plugins
-- [ ] USDC support
-- [ ] Smart contract policy enforcement (on-chain)
 - [ ] Enterprise dashboard
 - [ ] Agent-to-agent payments
 

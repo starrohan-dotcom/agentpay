@@ -18,6 +18,8 @@ const agent = new AgentWallet({
         .build()
 });
 
+await agent.init();
+
 // 2. Check balance
 const bal = await agent.balance();
 console.log("Agent balance:", bal, "ETH");

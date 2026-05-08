@@ -8,9 +8,6 @@ async function testPersistence() {
   console.log("--- Testing Persistence Fix ---");
 
   const agentId = "test-agent-" + Math.random().toString(36).substring(7);
-  const stateFile = path.join(process.cwd(), `.agentpay-state-${agentId}.json`);
-  if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile);
-
   const privateKey = generatePrivateKey();
   const target = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
   const limit = 0.01;
@@ -22,9 +19,10 @@ async function testPersistence() {
     agentId,
     policy: policy().dailyLimit(limit).build(),
   });
+  await agent1.init();
 
   (agent1 as any).dailySpent = parseEther("0.008");
-  (agent1 as any).saveState();
+  await (agent1 as any).saveState();
   console.log(`Spent today: ${(agent1 as any).dailySpentSoFar()} ETH`);
 
   // Session 2: Agent restarts
@@ -34,11 +32,12 @@ async function testPersistence() {
     agentId,
     policy: policy().dailyLimit(limit).build(),
   });
+  await agent2.init();
 
   console.log(`Spent today: ${(agent2 as any).dailySpentSoFar()} ETH`);
 
   try {
-    (agent2 as any).checkPolicy(target, parseEther("0.005"));
+    await (agent2 as any).checkPolicy(target, parseEther("0.005"));
     console.log("❌ Failed: Session 2 allowed payment (Persistence bug)");
   } catch (e: any) {
     if (e.message.includes("daily limit")) {
@@ -56,6 +55,7 @@ async function testPersistence() {
     agentId: agentId2,
     policy: policy().dailyLimit(limit).build(),
   });
+  await agent3.init();
   console.log(`Agent ${agentId2} spent today: ${(agent3 as any).dailySpentSoFar()} ETH`);
   if ((agent3 as any).dailySpent === 0n) {
       console.log("✅ Success: New agent started with 0 spend");
@@ -64,9 +64,8 @@ async function testPersistence() {
   }
 
   // Cleanup
-  if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile);
-  const stateFile2 = path.join(process.cwd(), `.agentpay-state-${agentId2}.json`);
-  if (fs.existsSync(stateFile2)) fs.unlinkSync(stateFile2);
+  const files = fs.readdirSync(process.cwd()).filter(f => f.startsWith(`.agentpay-state-test-agent-`));
+  files.forEach(f => fs.unlinkSync(f));
 }
 
 testPersistence().catch(console.error);
