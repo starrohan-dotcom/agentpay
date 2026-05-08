@@ -147,6 +147,31 @@ AgentPay supports the **Model Context Protocol (MCP)**. You can give your Claude
 
 3.  Restart Claude. You will now see a 💳 icon, and you can ask Claude: *"What is my wallet balance?"* or *"Send 0.001 ETH to 0x..."*
 
+### Roo Code (VS Code)
+
+AgentPay works perfectly with **Roo Code**.
+
+1.  Open the Roo Code side panel in VS Code.
+2.  Click on the **MCP Settings** icon (or open `.roo/mcp_settings.json`).
+3.  Add the following configuration:
+
+```json
+{
+  "mcpServers": {
+    "agentpay": {
+      "command": "npx",
+      "args": ["-y", "@starrohan/agentpay", "mcp"],
+      "env": {
+        "AGENT_PRIVATE_KEY": "0xYOUR_PRIVATE_KEY_HERE",
+        "RPC_URL": "https://sepolia.base.org"
+      }
+    }
+  }
+}
+```
+
+4.  Roo Code will automatically detect the new tools. You can now tell Roo: *"Pay for the API credits using my AgentPay wallet."*
+
 ---
 
 ## API Reference
@@ -228,26 +253,26 @@ const txs = agent.history();
 
 ---
 
-### `agent.dailySpentSoFar()` → `number`
+### `agent.dailySpentSoFar(token?)` → `string`
 
 ```ts
-const spent = agent.dailySpentSoFar();
-console.log(`Agent spent ${spent} ETH today`);
+const spent = agent.dailySpentSoFar("USDC");
+console.log(`Agent spent ${spent} USDC today`);
 ```
 
 ---
 
 ### `agent.summary()`
 
-Prints a full summary to console:
+Prints a full summary of all assets to console:
 
 ```
 [AgentPay] ── my-agent Summary ──
   Address:      0x5908AE35...
-  Balance:      0.000079 ETH
-  Spent today:  0.00001 ETH
+  Balance:      0.000079 ETH | 150.00 USDC
+  Spent today:  0.00001 ETH | 5.00 USDC
   Transactions: 1
-  Daily limit:  0.01 ETH (0.1% used)
+  Daily limit:  0.01 (Policy enforced)
 ```
 
 ---
@@ -263,41 +288,11 @@ Agent balance: 0.000089873993838909 ETH
 Policy blocked the payment: tx amount 99 ETH exceeds maxTxAmount 0.00001 ETH
 
 [AgentPay] ── my-agent Summary ──
-  Address:      0x5908AE35d80D3c69F702b1cbC8dfC1bE0D3A064B
-  Balance:      0.000079 ETH
-  Spent today:  0.00001 ETH
+  Address:      0x5908AE35...
+  Balance:      0.000079 ETH | 150.00 USDC
+  Spent today:  0.00001 ETH | 5.00 USDC
   Transactions: 1
-  Daily limit:  0.0002 ETH (5.0% used)
-```
-
----
-
-## Use with LangChain
-
-```ts
-import { AgentWallet, policy } from "@starrohan/agentpay";
-import { Tool } from "langchain/tools";
-
-class AgentPayTool extends Tool {
-  name = "agent_wallet";
-  description = `Pay for services or check balance.
-    Input JSON: { "action": "pay"|"balance", "to": "0x...", "amount": 0.00001 }`;
-
-  constructor(private wallet: AgentWallet) { super(); }
-
-  async _call(input: string): Promise<string> {
-    const { action, to, amount } = JSON.parse(input);
-    if (action === "pay") {
-      const tx = await this.wallet.pay({ to, amount });
-      return `Paid ${amount} ETH to ${to}. Tx: ${tx.hash}`;
-    }
-    const bal = await this.wallet.balance();
-    return `Balance: ${bal} ETH`;
-  }
-}
-
-// Drop into any LangChain agent:
-// const tool = new AgentPayTool(agent);
+  Daily limit:  0.01 (Policy enforced)
 ```
 
 ---
@@ -324,7 +319,8 @@ const agent = new AgentWallet({
 - [x] Persistent state & BigInt precision (v1.1.1)
 - [x] USDC support (v1.2.0)
 - [x] Smart Account (ERC-7579) integration (v1.2.0)
-- [ ] LangChain / AutoGen / CrewAI plugins
+- [x] LangChain / AutoGen / CrewAI plugins (v1.2.0)
+- [x] Claude Desktop / MCP Support (v1.2.0)
 - [ ] Enterprise dashboard
 - [ ] Agent-to-agent payments
 
