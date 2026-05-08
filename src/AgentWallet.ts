@@ -415,7 +415,12 @@ export class AgentWallet {
   // ── Print a summary ──
   async summary(): Promise<void> {
     const bal = await this.balance("ETH");
-    const balUSDC = await this.balance("USDC");
+    let balUSDC = "0.00";
+    try {
+        balUSDC = await this.balance("USDC");
+    } catch (e) {
+        // Fallback if contract doesn't exist on current chain (e.g. local)
+    }
     const spentStr = formatEther(this.dailySpent);
     const spentStrUSDC = (Number(this.dailySpentUSDC) / 1_000_000).toString();
 

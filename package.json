@@ -22,6 +22,7 @@
     "build": "tsc",
     "prepublishOnly": "npm run build",
     "example": "tsx example.ts",
+    "mcp": "tsx src/mcp/server.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -53,6 +54,7 @@
   },
   "dependencies": {
     "@langchain/core": "^1.1.45",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",
     "permissionless": "^0.3.5"
   }
