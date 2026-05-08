@@ -24,9 +24,16 @@ AgentPay fixes that.
 npm install @starrohan/agentpay
 ```
 
+## Quickstart — 1 command
+
+Initialize your agent project in 5 seconds:
+```bash
+npx agentpay
+```
+
 ---
 
-## Quickstart — 3 lines
+## Usage — 3 lines
 
 ```ts
 import "dotenv/config";
@@ -53,6 +60,16 @@ That's it. Your agent now has a wallet, spending limits, and a full transaction 
 - 📊 **Daily spend tracker** — know exactly how much your agent spent today
 - ⚡ **Base L2** — sub-second settlement, near-zero gas fees (~$0.000001 per tx)
 - 🔌 **Framework agnostic** — works with LangChain, AutoGen, CrewAI, or any agent
+
+---
+
+## Examples & Use Cases
+
+Check out our [examples/](https://github.com/starrohan-dotcom/agentpay/tree/main/examples) directory for high-impact integrations:
+
+- 🤖 **[Self-Sustaining Agent](https://github.com/starrohan-dotcom/agentpay/blob/main/examples/self-sustaining-agent.ts)** — An agent that pays for its own OpenAI/Anthropic API usage.
+- 🦜 **[LangChain Integration](https://github.com/starrohan-dotcom/agentpay/blob/main/examples/langchain-integration.ts)** — A drop-in tool for any LangChain agent.
+- 🕵️ **Autonomous Researcher** — Paying for premium data and search APIs.
 
 ---
 

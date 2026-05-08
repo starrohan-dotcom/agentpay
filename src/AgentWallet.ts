@@ -404,27 +404,26 @@ export class AgentWallet {
   }
 
   // ── Get daily spend so far ──
-  dailySpentSoFar(): string {
-    return formatEther(this.dailySpent);
+  dailySpentSoFar(token: "ETH" | "USDC" = "ETH"): string {
+    return token === "ETH"
+        ? formatEther(this.dailySpent)
+        : (Number(this.dailySpentUSDC) / 1_000_000).toString();
   }
 
   // ── Print a summary ──
   async summary(): Promise<void> {
-    const bal = await this.balance();
+    const bal = await this.balance("ETH");
+    const balUSDC = await this.balance("USDC");
     const spentStr = formatEther(this.dailySpent);
+    const spentStrUSDC = (Number(this.dailySpentUSDC) / 1_000_000).toString();
+
     console.log(`\n[AgentPay] ── ${this.agentId} Summary ──`);
     console.log(`  Address:      ${this.address}`);
-    console.log(`  Balance:      ${bal} ETH`);
-    console.log(`  Spent today:  ${spentStr} ETH`);
+    console.log(`  Balance:      ${bal} ETH | ${balUSDC} USDC`);
+    console.log(`  Spent today:  ${spentStr} ETH | ${spentStrUSDC} USDC`);
     console.log(`  Transactions: ${this.txHistory.length}`);
     if (this.policy.dailyLimit) {
-      const limitInWei = parseEther(this.policy.dailyLimit.toFixed(18));
-      console.log(
-        `  Daily limit:  ${this.policy.dailyLimit} ETH (${(
-          (Number(this.dailySpent) / Number(limitInWei)) *
-          100
-        ).toFixed(1)}% used)`
-      );
+      console.log(`  Daily limit:  ${this.policy.dailyLimit} (Policy enforced on ${this.policy.maxTxAmount ? 'ETH/USDC' : 'ETH'})`);
     }
     console.log("");
   }
