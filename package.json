@@ -52,6 +52,7 @@
     "viem": "^2.48.8"
   },
   "dependencies": {
+    "@langchain/core": "^1.1.45",
     "dotenv": "^17.4.2",
     "permissionless": "^0.3.5"
   }
