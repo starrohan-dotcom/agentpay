@@ -105,6 +105,15 @@ Error: [AgentPay] Policy violation: tx amount 99 ETH exceeds maxTxAmount 0.001 E
 
 ---
 
+## Security
+
+- ✅ **Persistent state** — daily limits and transaction history survive agent restarts
+- ✅ **BigInt math** — all internal calculations use Wei for absolute precision (no floating-point errors)
+- ✅ **Environment variables** — secure private key management via `.env` support
+- ✅ **Policy enforcement** — autonomous guardrails that cannot be bypassed by agent logic
+
+---
+
 ### `agent.balance()` → `string`
 
 ```ts

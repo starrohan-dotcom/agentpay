@@ -3,11 +3,12 @@
 // ─────────────────────────────────────────────
 // Run: node example.mjs
 
+import "dotenv/config";
 import { AgentWallet, policy } from "./src/index.ts";
 
 // 1. Create your agent wallet with a spending policy
 const agent = new AgentWallet({
-    privateKey: process.env.AGENT_PRIVATE_KEY || "0xYOUR_PRIVATE_KEY_HERE",  // set via env var!
+    privateKey: (process.env.AGENT_PRIVATE_KEY as `0x${string}`) || "0xYOUR_PRIVATE_KEY_HERE",  // set via env var!
     agentId: "research-agent-01",           // give your agent a name
 
     policy: policy()

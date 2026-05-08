@@ -9,6 +9,8 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
+import fs from "fs";
+import path from "path";
 
 // ─────────────────────────────────────────────
 // TYPES
@@ -86,8 +88,9 @@ export class AgentWallet {
   private publicClient: any;
   private policy: SpendingPolicy;
   private txHistory: TxRecord[] = [];
-  private dailySpent: number = 0;
+  private dailySpent: bigint = 0n;
   private dayStart: Date = new Date();
+  private stateFile: string;
   public address: Address;
   public agentId: string;
 
@@ -96,6 +99,9 @@ export class AgentWallet {
     this.address = account.address;
     this.agentId = config.agentId ?? "agent-" + account.address.slice(0, 6);
     this.policy = config.policy ?? {};
+    this.stateFile = path.join(process.cwd(), `.agentpay-state-${this.agentId}.json`);
+
+    this.loadState();
 
     this.walletClient = createWalletClient({
       account,
@@ -109,35 +115,67 @@ export class AgentWallet {
     });
   }
 
+  // ── Persistence Helpers ──
+  private loadState(): void {
+    try {
+      if (fs.existsSync(this.stateFile)) {
+        const raw = fs.readFileSync(this.stateFile, "utf8");
+        const state = JSON.parse(raw);
+        this.dailySpent = state.dailySpent ? BigInt(state.dailySpent) : 0n;
+        this.dayStart = state.dayStart ? new Date(state.dayStart) : new Date();
+        this.txHistory = (state.txHistory || []).map((tx: any) => ({
+          ...tx,
+          timestamp: new Date(tx.timestamp),
+        }));
+      }
+    } catch (err) {
+      console.warn("[AgentPay] Could not load state, starting fresh:", err);
+    }
+  }
+
+  private saveState(): void {
+    try {
+      const state = {
+        dailySpent: this.dailySpent.toString(),
+        dayStart: this.dayStart.toISOString(),
+        txHistory: this.txHistory,
+      };
+      fs.writeFileSync(this.stateFile, JSON.stringify(state, null, 2));
+    } catch (err) {
+      console.error("[AgentPay] Failed to save state:", err);
+    }
+  }
+
   // ── Check spending policy before every payment ──
-  private checkPolicy(to: Address, amount: number): void {
+  private checkPolicy(to: Address, amount: bigint): void {
     // Reset daily counter if new day
     const now = new Date();
     const hoursSinceDayStart =
       (now.getTime() - this.dayStart.getTime()) / (1000 * 60 * 60);
     if (hoursSinceDayStart >= 24) {
-      this.dailySpent = 0;
+      this.dailySpent = 0n;
       this.dayStart = now;
+      this.saveState();
     }
 
     // Max per transaction
-    if (
-      this.policy.maxTxAmount !== undefined &&
-      amount > this.policy.maxTxAmount
-    ) {
-      throw new Error(
-        `[AgentPay] Policy violation: tx amount ${amount} ETH exceeds maxTxAmount ${this.policy.maxTxAmount} ETH`
-      );
+    if (this.policy.maxTxAmount !== undefined) {
+      const maxInWei = parseEther(this.policy.maxTxAmount.toFixed(18));
+      if (amount > maxInWei) {
+        throw new Error(
+          `[AgentPay] Policy violation: tx amount ${formatEther(amount)} ETH exceeds maxTxAmount ${this.policy.maxTxAmount} ETH`
+        );
+      }
     }
 
     // Daily limit
-    if (
-      this.policy.dailyLimit !== undefined &&
-      this.dailySpent + amount > this.policy.dailyLimit
-    ) {
-      throw new Error(
-        `[AgentPay] Policy violation: daily limit of ${this.policy.dailyLimit} ETH would be exceeded. Spent today: ${this.dailySpent} ETH`
-      );
+    if (this.policy.dailyLimit !== undefined) {
+      const limitInWei = parseEther(this.policy.dailyLimit.toFixed(18));
+      if (this.dailySpent + amount > limitInWei) {
+        throw new Error(
+          `[AgentPay] Policy violation: daily limit of ${this.policy.dailyLimit} ETH would be exceeded. Spent today: ${formatEther(this.dailySpent)} ETH`
+        );
+      }
     }
 
     // Allowlist check
@@ -154,22 +192,23 @@ export class AgentWallet {
     }
 
     // Warn above threshold
-    if (
-      this.policy.requireLogAbove !== undefined &&
-      amount > this.policy.requireLogAbove
-    ) {
-      console.warn(
-        `[AgentPay] ⚠️  Large payment warning: ${amount} ETH to ${to}`
-      );
+    if (this.policy.requireLogAbove !== undefined) {
+      const warnInWei = parseEther(this.policy.requireLogAbove.toFixed(18));
+      if (amount > warnInWei) {
+        console.warn(
+          `[AgentPay] ⚠️  Large payment warning: ${formatEther(amount)} ETH to ${to}`
+        );
+      }
     }
   }
 
   // ── Send a payment ──
   async pay(opts: PayOptions): Promise<TxRecord> {
     const { to, amount, memo } = opts;
+    const amountInWei = parseEther(amount.toFixed(18));
 
     // Enforce policy
-    this.checkPolicy(to, amount);
+    this.checkPolicy(to, amountInWei);
 
     console.log(
       `[AgentPay] ${this.agentId} paying ${amount} ETH to ${to}${memo ? ` (${memo})` : ""
@@ -182,14 +221,17 @@ export class AgentWallet {
     try {
       hash = await this.walletClient.sendTransaction({
         to,
-        value: parseEther(amount.toString()),
+        value: amountInWei,
       });
 
       // Wait for confirmation
       await this.publicClient.waitForTransactionReceipt({ hash });
 
       // Update daily spend tracker
-      this.dailySpent += amount;
+      this.dailySpent += amountInWei;
+
+      // Persist state
+      this.saveState();
 
       console.log(`[AgentPay] ✅ Payment sent!`);
       console.log(
@@ -229,22 +271,24 @@ export class AgentWallet {
   }
 
   // ── Get daily spend so far ──
-  dailySpentSoFar(): number {
-    return this.dailySpent;
+  dailySpentSoFar(): string {
+    return formatEther(this.dailySpent);
   }
 
   // ── Print a summary ──
   async summary(): Promise<void> {
     const bal = await this.balance();
+    const spentStr = formatEther(this.dailySpent);
     console.log(`\n[AgentPay] ── ${this.agentId} Summary ──`);
     console.log(`  Address:      ${this.address}`);
     console.log(`  Balance:      ${bal} ETH`);
-    console.log(`  Spent today:  ${this.dailySpent} ETH`);
+    console.log(`  Spent today:  ${spentStr} ETH`);
     console.log(`  Transactions: ${this.txHistory.length}`);
     if (this.policy.dailyLimit) {
+      const limitInWei = parseEther(this.policy.dailyLimit.toFixed(18));
       console.log(
         `  Daily limit:  ${this.policy.dailyLimit} ETH (${(
-          (this.dailySpent / this.policy.dailyLimit) *
+          (Number(this.dailySpent) / Number(limitInWei)) *
           100
         ).toFixed(1)}% used)`
       );
