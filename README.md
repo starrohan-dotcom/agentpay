@@ -69,6 +69,8 @@ Check out our [examples/](https://github.com/starrohan-dotcom/agentpay/tree/main
 
 - 🤖 **[Self-Sustaining Agent](https://github.com/starrohan-dotcom/agentpay/blob/main/examples/self-sustaining-agent.ts)** — An agent that pays for its own OpenAI/Anthropic API usage.
 - 🦜 **[LangChain Official Plugin](https://github.com/starrohan-dotcom/agentpay/blob/main/examples/langchain-official-plugin.ts)** — Built-in Tool support for LangChain agents.
+- 🤝 **CrewAI Support** — Native tool generator for multi-agent workflows.
+- 🤖 **AutoGen Integration** — JSON Schema & implementation for AutoGen functions.
 - 🤖 **[Self-Sustaining Agent](https://github.com/starrohan-dotcom/agentpay/blob/main/examples/self-sustaining-agent.ts)** — An agent that pays for its own OpenAI/Anthropic API usage.
 - 🕵️ **Autonomous Researcher** — Paying for premium data and search APIs.
 
@@ -87,9 +89,34 @@ const agent = new AgentWallet({ privateKey: "0x..." });
 await agent.init();
 
 const agentPayTool = new AgentPayTool(agent);
+```
 
-// Pass to your LangChain agent:
-// const executor = initializeAgentExecutorWithOptions([agentPayTool], ...);
+### CrewAI
+
+Generate tools compatible with CrewAI agents:
+
+```ts
+import { AgentWallet, createCrewAIPayTool } from "@starrohan/agentpay";
+
+const wallet = new AgentWallet({ privateKey: "0x..." });
+await wallet.init();
+
+const walletTool = createCrewAIPayTool(wallet);
+// const agent = new Agent({ tools: [walletTool], ... });
+```
+
+### AutoGen
+
+Native function registration for AutoGen:
+
+```ts
+import { AgentWallet, getAutoGenPayTool } from "@starrohan/agentpay";
+
+const wallet = new AgentWallet({ privateKey: "0x..." });
+await wallet.init();
+
+const { schema, implementation } = getAutoGenPayTool(wallet);
+// register_function(implementation, schema, ...);
 ```
 
 ---
