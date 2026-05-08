@@ -1,6 +1,6 @@
 {
   "name": "@starrohan/agentpay",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Autonomous agent wallets with built-in spending policies for Ethereum",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -43,8 +43,12 @@
     "viem": "^2.0.0"
   },
   "devDependencies": {
+    "@types/node": "^25.6.2",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "viem": "^2.48.8"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
   }
 }
