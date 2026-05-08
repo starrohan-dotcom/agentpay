@@ -288,15 +288,12 @@ Agent balance: 0.000089873993838909 ETH
 Policy blocked the payment: tx amount 99 ETH exceeds maxTxAmount 0.00001 ETH
 
 [AgentPay] ── my-agent Summary ──
-  Address:      0x5908AE35d80D3c69F702b1cbC8dfC1bE0D3A064B
-  Balance:      0.000079 ETH
-  Spent today:  0.00001 ETH
+  Address:      0x5908AE35...
+  Balance:      0.000079 ETH | 150.00 USDC
+  Spent today:  0.00001 ETH | 5.00 USDC
   Transactions: 1
-  Daily limit:  0.0002 ETH (5.0% used)
+  Daily limit:  0.01 (Policy enforced)
 ```
-
----
-
 
 ---
 
