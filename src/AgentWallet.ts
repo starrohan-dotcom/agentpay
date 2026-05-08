@@ -144,16 +144,18 @@ export class AgentWallet {
     this.storage = config.storage ?? new FileStorage();
 
     const chain = config.rpcUrl?.includes("mainnet") ? base : baseSepolia;
+    const defaultRpc = chain.id === 8453 ? "https://mainnet.base.org" : "https://sepolia.base.org";
+    const rpcUrl = config.rpcUrl ?? defaultRpc;
 
     this.walletClient = createWalletClient({
       account,
       chain,
-      transport: http(config.rpcUrl ?? "https://sepolia.base.org"),
+      transport: http(rpcUrl),
     });
 
     this.publicClient = createPublicClient({
       chain,
-      transport: http(config.rpcUrl ?? "https://sepolia.base.org"),
+      transport: http(rpcUrl),
     });
   }
 

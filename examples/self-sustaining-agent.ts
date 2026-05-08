@@ -6,12 +6,13 @@
  */
 
 import "dotenv/config";
-import { AgentWallet, policy } from "@starrohan/agentpay";
+import { AgentWallet, policy } from "../src/index.js";
+import { generatePrivateKey } from "viem/accounts";
 
 async function runSelfSustainingAgent() {
   // 1. Setup the agent with a budget
   const agent = new AgentWallet({
-    privateKey: process.env.AGENT_PRIVATE_KEY as `0x${string}`,
+    privateKey: (process.env.AGENT_PRIVATE_KEY as `0x${string}`) || generatePrivateKey(),
     agentId: "openai-sustainer",
     policy: policy()
       .dailyLimit(0.01) // Max $30 worth of ETH/USDC per day

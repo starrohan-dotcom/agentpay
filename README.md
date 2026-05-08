@@ -68,8 +68,29 @@ That's it. Your agent now has a wallet, spending limits, and a full transaction 
 Check out our [examples/](https://github.com/starrohan-dotcom/agentpay/tree/main/examples) directory for high-impact integrations:
 
 - 🤖 **[Self-Sustaining Agent](https://github.com/starrohan-dotcom/agentpay/blob/main/examples/self-sustaining-agent.ts)** — An agent that pays for its own OpenAI/Anthropic API usage.
-- 🦜 **[LangChain Integration](https://github.com/starrohan-dotcom/agentpay/blob/main/examples/langchain-integration.ts)** — A drop-in tool for any LangChain agent.
+- 🦜 **[LangChain Official Plugin](https://github.com/starrohan-dotcom/agentpay/blob/main/examples/langchain-official-plugin.ts)** — Built-in Tool support for LangChain agents.
+- 🤖 **[Self-Sustaining Agent](https://github.com/starrohan-dotcom/agentpay/blob/main/examples/self-sustaining-agent.ts)** — An agent that pays for its own OpenAI/Anthropic API usage.
 - 🕵️ **Autonomous Researcher** — Paying for premium data and search APIs.
+
+---
+
+## Integrations
+
+### LangChain
+
+AgentPay provides an official LangChain tool for easy integration.
+
+```ts
+import { AgentWallet, AgentPayTool } from "@starrohan/agentpay";
+
+const agent = new AgentWallet({ privateKey: "0x..." });
+await agent.init();
+
+const agentPayTool = new AgentPayTool(agent);
+
+// Pass to your LangChain agent:
+// const executor = initializeAgentExecutorWithOptions([agentPayTool], ...);
+```
 
 ---
 
