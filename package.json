@@ -5,6 +5,9 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "agentpay": "bin/agentpay.js"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -37,7 +40,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/starrohan-dotcom/agentpay.git"
+    "url": "git+https://github.com/starrohan-dotcom/agentpay.git"
   },
   "peerDependencies": {
     "viem": "^2.0.0"
