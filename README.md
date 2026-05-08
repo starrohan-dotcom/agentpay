@@ -147,6 +147,31 @@ AgentPay supports the **Model Context Protocol (MCP)**. You can give your Claude
 
 3.  Restart Claude. You will now see a 💳 icon, and you can ask Claude: *"What is my wallet balance?"* or *"Send 0.001 ETH to 0x..."*
 
+### Roo Code (VS Code)
+
+AgentPay works perfectly with **Roo Code**.
+
+1.  Open the Roo Code side panel in VS Code.
+2.  Click on the **MCP Settings** icon (or open `.roo/mcp_settings.json`).
+3.  Add the following configuration:
+
+```json
+{
+  "mcpServers": {
+    "agentpay": {
+      "command": "npx",
+      "args": ["-y", "@starrohan/agentpay", "mcp"],
+      "env": {
+        "AGENT_PRIVATE_KEY": "0xYOUR_PRIVATE_KEY_HERE",
+        "RPC_URL": "https://sepolia.base.org"
+      }
+    }
+  }
+}
+```
+
+4.  Roo Code will automatically detect the new tools. You can now tell Roo: *"Pay for the API credits using my AgentPay wallet."*
+
 ---
 
 ## API Reference
