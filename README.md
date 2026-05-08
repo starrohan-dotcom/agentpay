@@ -226,7 +226,7 @@ const agent = new AgentWallet({
 - [x] AgentWallet class with pay, balance, history
 - [x] Spending policy engine (maxTx, dailyLimit, allowlist)
 - [x] Base Sepolia testnet
-- [x] Persistent state & BigInt precision (v1.1.0)
+- [x] Persistent state & BigInt precision (v1.1.1)
 - [ ] LangChain / AutoGen / CrewAI plugins
 - [ ] USDC support
 - [ ] Smart contract policy enforcement (on-chain)
