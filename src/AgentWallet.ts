@@ -4,28 +4,30 @@ import {
   http,
   parseEther,
   formatEther,
+  encodeFunctionData,
   type Hash,
   type Address,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
-import fs from "fs";
-import path from "path";
+import { baseSepolia, base } from "viem/chains";
+import { type StorageProvider } from "./storage/StorageProvider.js";
+import { FileStorage } from "./storage/FileStorage.js";
 
 // ─────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────
 
 export interface SpendingPolicy {
-  maxTxAmount?: number;    // max per single transaction (in ETH)
-  dailyLimit?: number;     // max total spend per day (in ETH)
+  maxTxAmount?: number;    // max per single transaction (in ETH/USDC)
+  dailyLimit?: number;     // max total spend per day (in ETH/USDC)
   allowedAddresses?: Address[]; // whitelist of recipients (empty = allow all)
   requireLogAbove?: number; // log a warning if tx exceeds this amount
 }
 
 export interface PayOptions {
   to: Address;
-  amount: number;          // in ETH
+  amount: number;          // in ETH or tokens
+  token?: "ETH" | "USDC";  // default is ETH
   memo?: string;           // optional label for this payment
 }
 
@@ -43,6 +45,9 @@ export interface WalletConfig {
   agentId?: string;        // optional human-readable name for this agent
   policy?: SpendingPolicy;
   rpcUrl?: string;
+  storage?: StorageProvider; // optional storage provider (defaults to FileStorage)
+  useSmartAccount?: boolean; // enable ERC-7579 Smart Account
+  bundlerUrl?: string;      // optional bundler URL for Smart Account
 }
 
 // ─────────────────────────────────────────────
@@ -83,45 +88,114 @@ export const policy = () => new PolicyBuilder();
 // AGENT WALLET — main class
 // ─────────────────────────────────────────────
 
+export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"; // Base Mainnet USDC
+
+const ERC20_ABI = [
+  {
+    name: "transfer",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "recipient", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "decimals",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+] as const;
+
+import { createSmartAccountClient } from "permissionless";
+import { toSafeSmartAccount } from "permissionless/accounts";
+
 export class AgentWallet {
   private walletClient: any;
+  private smartAccountClient: any;
   private publicClient: any;
   private policy: SpendingPolicy;
   private txHistory: TxRecord[] = [];
   private dailySpent: bigint = 0n;
+  private dailySpentUSDC: bigint = 0n;
   private dayStart: Date = new Date();
-  private stateFile: string;
+  private storage: StorageProvider;
   public address: Address;
   public agentId: string;
 
+  private config: WalletConfig;
+
   constructor(config: WalletConfig) {
+    this.config = config;
     const account = privateKeyToAccount(config.privateKey);
-    this.address = account.address;
+    this.address = account.address; // Initial EOA address, will be updated if smart account is used
     this.agentId = config.agentId ?? "agent-" + account.address.slice(0, 6);
     this.policy = config.policy ?? {};
-    this.stateFile = path.join(process.cwd(), `.agentpay-state-${this.agentId}.json`);
+    this.storage = config.storage ?? new FileStorage();
 
-    this.loadState();
+    const chain = config.rpcUrl?.includes("mainnet") ? base : baseSepolia;
 
     this.walletClient = createWalletClient({
       account,
-      chain: baseSepolia,
+      chain,
       transport: http(config.rpcUrl ?? "https://sepolia.base.org"),
     });
 
     this.publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain,
       transport: http(config.rpcUrl ?? "https://sepolia.base.org"),
     });
   }
 
+  // ── Initialization ──
+  async init(): Promise<void> {
+    await this.loadState();
+
+    if (this.config.useSmartAccount) {
+      const account = privateKeyToAccount(this.config.privateKey);
+      const chain = this.config.rpcUrl?.includes("mainnet") ? base : baseSepolia;
+
+      const safeAccount = await toSafeSmartAccount(this.publicClient, {
+        client: this.publicClient,
+        signer: account,
+        safeVersion: "1.4.1",
+        entryPointDefinition: {
+            address: "0x0000000071727De22E5E9d8BAf0edAc6f37da032", // EntryPoint v0.7
+            version: "0.7",
+        }
+      } as any);
+
+      this.smartAccountClient = createSmartAccountClient({
+        account: safeAccount,
+        chain,
+        bundlerTransport: http(this.config.bundlerUrl ?? (chain.id === 8453 ? "https://api.pimlico.io/v2/base/rpc?apikey=YOUR_API_KEY" : "https://api.pimlico.io/v2/base-sepolia/rpc?apikey=YOUR_API_KEY")),
+        middleware: {
+            gasPrice: async () => (await this.publicClient.getGasPrice()),
+        }
+      });
+
+      this.address = safeAccount.address;
+      console.log(`[AgentPay] Smart Account initialized at ${this.address}`);
+    }
+  }
+
   // ── Persistence Helpers ──
-  private loadState(): void {
+  private async loadState(): Promise<void> {
     try {
-      if (fs.existsSync(this.stateFile)) {
-        const raw = fs.readFileSync(this.stateFile, "utf8");
-        const state = JSON.parse(raw);
+      const state = await this.storage.load(this.agentId);
+      if (state) {
         this.dailySpent = state.dailySpent ? BigInt(state.dailySpent) : 0n;
+        this.dailySpentUSDC = state.dailySpentUSDC ? BigInt(state.dailySpentUSDC) : 0n;
         this.dayStart = state.dayStart ? new Date(state.dayStart) : new Date();
         this.txHistory = (state.txHistory || []).map((tx: any) => ({
           ...tx,
@@ -133,47 +207,58 @@ export class AgentWallet {
     }
   }
 
-  private saveState(): void {
+  private async saveState(): Promise<void> {
     try {
       const state = {
         dailySpent: this.dailySpent.toString(),
+        dailySpentUSDC: this.dailySpentUSDC.toString(),
         dayStart: this.dayStart.toISOString(),
         txHistory: this.txHistory,
       };
-      fs.writeFileSync(this.stateFile, JSON.stringify(state, null, 2));
+      await this.storage.save(this.agentId, state);
     } catch (err) {
       console.error("[AgentPay] Failed to save state:", err);
     }
   }
 
   // ── Check spending policy before every payment ──
-  private checkPolicy(to: Address, amount: bigint): void {
+  private async checkPolicy(to: Address, amount: bigint, token: "ETH" | "USDC" = "ETH"): Promise<void> {
     // Reset daily counter if new day
     const now = new Date();
     const hoursSinceDayStart =
       (now.getTime() - this.dayStart.getTime()) / (1000 * 60 * 60);
     if (hoursSinceDayStart >= 24) {
       this.dailySpent = 0n;
+      this.dailySpentUSDC = 0n;
       this.dayStart = now;
-      this.saveState();
+      await this.saveState();
     }
+
+    const decimals = token === "USDC" ? 6 : 18;
+    const spentToday = token === "USDC" ? this.dailySpentUSDC : this.dailySpent;
 
     // Max per transaction
     if (this.policy.maxTxAmount !== undefined) {
-      const maxInWei = parseEther(this.policy.maxTxAmount.toFixed(18));
-      if (amount > maxInWei) {
+      const maxInBaseUnits = token === "USDC"
+        ? BigInt(Math.floor(this.policy.maxTxAmount * 1_000_000))
+        : parseEther(this.policy.maxTxAmount.toFixed(18));
+
+      if (amount > maxInBaseUnits) {
         throw new Error(
-          `[AgentPay] Policy violation: tx amount ${formatEther(amount)} ETH exceeds maxTxAmount ${this.policy.maxTxAmount} ETH`
+          `[AgentPay] Policy violation: tx amount ${amount} ${token} exceeds maxTxAmount ${this.policy.maxTxAmount} ${token}`
         );
       }
     }
 
     // Daily limit
     if (this.policy.dailyLimit !== undefined) {
-      const limitInWei = parseEther(this.policy.dailyLimit.toFixed(18));
-      if (this.dailySpent + amount > limitInWei) {
+      const limitInBaseUnits = token === "USDC"
+        ? BigInt(Math.floor(this.policy.dailyLimit * 1_000_000))
+        : parseEther(this.policy.dailyLimit.toFixed(18));
+
+      if (spentToday + amount > limitInBaseUnits) {
         throw new Error(
-          `[AgentPay] Policy violation: daily limit of ${this.policy.dailyLimit} ETH would be exceeded. Spent today: ${formatEther(this.dailySpent)} ETH`
+          `[AgentPay] Policy violation: daily limit of ${this.policy.dailyLimit} ${token} would be exceeded. Spent today: ${spentToday} ${token}`
         );
       }
     }
@@ -193,10 +278,13 @@ export class AgentWallet {
 
     // Warn above threshold
     if (this.policy.requireLogAbove !== undefined) {
-      const warnInWei = parseEther(this.policy.requireLogAbove.toFixed(18));
-      if (amount > warnInWei) {
+      const warnInBaseUnits = token === "USDC"
+        ? BigInt(Math.floor(this.policy.requireLogAbove * 1_000_000))
+        : parseEther(this.policy.requireLogAbove.toFixed(18));
+
+      if (amount > warnInBaseUnits) {
         console.warn(
-          `[AgentPay] ⚠️  Large payment warning: ${formatEther(amount)} ETH to ${to}`
+          `[AgentPay] ⚠️  Large payment warning: ${amount} ${token} to ${to}`
         );
       }
     }
@@ -204,14 +292,16 @@ export class AgentWallet {
 
   // ── Send a payment ──
   async pay(opts: PayOptions): Promise<TxRecord> {
-    const { to, amount, memo } = opts;
-    const amountInWei = parseEther(amount.toFixed(18));
+    const { to, amount, token = "ETH", memo } = opts;
+    const amountInBaseUnits = token === "USDC"
+      ? BigInt(Math.floor(amount * 1_000_000))
+      : parseEther(amount.toFixed(18));
 
     // Enforce policy
-    this.checkPolicy(to, amountInWei);
+    await this.checkPolicy(to, amountInBaseUnits, token);
 
     console.log(
-      `[AgentPay] ${this.agentId} paying ${amount} ETH to ${to}${memo ? ` (${memo})` : ""
+      `[AgentPay] ${this.agentId} paying ${amount} ${token} to ${to}${memo ? ` (${memo})` : ""
       }...`
     );
 
@@ -219,19 +309,55 @@ export class AgentWallet {
     let status: "success" | "failed" = "success";
 
     try {
-      hash = await this.walletClient.sendTransaction({
-        to,
-        value: amountInWei,
-      });
+      if (this.config.useSmartAccount) {
+        // Smart Account Transaction
+        if (token === "ETH") {
+            hash = await this.smartAccountClient.sendTransaction({
+                to,
+                value: amountInBaseUnits,
+            });
+        } else {
+            hash = await this.smartAccountClient.sendTransaction({
+                to: USDC_ADDRESS,
+                data: encodeFunctionData({
+                    abi: ERC20_ABI,
+                    functionName: "transfer",
+                    args: [to, amountInBaseUnits],
+                }),
+            });
+        }
+      } else {
+        // Standard EOA Transaction
+        if (token === "ETH") {
+          hash = await this.walletClient.sendTransaction({
+            to,
+            value: amountInBaseUnits,
+          });
+        } else {
+          // USDC Transfer
+          const { request } = await this.publicClient.simulateContract({
+            account: this.walletClient.account,
+            address: USDC_ADDRESS,
+            abi: ERC20_ABI,
+            functionName: "transfer",
+            args: [to, amountInBaseUnits],
+          });
+          hash = await this.walletClient.writeContract(request);
+        }
+      }
 
       // Wait for confirmation
       await this.publicClient.waitForTransactionReceipt({ hash });
 
       // Update daily spend tracker
-      this.dailySpent += amountInWei;
+      if (token === "ETH") {
+        this.dailySpent += amountInBaseUnits;
+      } else {
+        this.dailySpentUSDC += amountInBaseUnits;
+      }
 
       // Persist state
-      this.saveState();
+      await this.saveState();
 
       console.log(`[AgentPay] ✅ Payment sent!`);
       console.log(
@@ -258,11 +384,21 @@ export class AgentWallet {
   }
 
   // ── Get wallet balance ──
-  async balance(): Promise<string> {
-    const raw = await this.publicClient.getBalance({
-      address: this.address,
-    });
-    return formatEther(raw);
+  async balance(token: "ETH" | "USDC" = "ETH"): Promise<string> {
+    if (token === "ETH") {
+      const raw = await this.publicClient.getBalance({
+        address: this.address,
+      });
+      return formatEther(raw);
+    } else {
+      const raw = await this.publicClient.readContract({
+        address: USDC_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [this.address],
+      });
+      return (Number(raw) / 1_000_000).toString();
+    }
   }
 
   // ── Get transaction history ──

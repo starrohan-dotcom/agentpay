@@ -4,13 +4,10 @@ import { parseEther } from "viem";
 import fs from "fs";
 import path from "path";
 
-const STATE_FILE = path.join(process.cwd(), ".agentpay-state.json");
-
 async function runTests() {
   console.log("--- Starting Policy Logic Tests (BigInt version) ---");
 
-  if (fs.existsSync(STATE_FILE)) fs.unlinkSync(STATE_FILE);
-
+  const agentId = "policy-agent-" + Math.random().toString(36).substring(7);
   const privateKey = generatePrivateKey();
   const target = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
 
@@ -18,11 +15,13 @@ async function runTests() {
   console.log("\nTest 1: Max Transaction Amount Policy");
   const agent1 = new AgentWallet({
     privateKey,
+    agentId,
     policy: policy().maxTx(0.001).build(),
   });
+  await agent1.init();
 
   try {
-    (agent1 as any).checkPolicy(target, parseEther("0.002"));
+    await (agent1 as any).checkPolicy(target, parseEther("0.002"));
     console.log("❌ Test 1 Failed: Did not throw on maxTx violation");
   } catch (e: any) {
     if (e.message.includes("exceeds maxTxAmount")) {
@@ -36,12 +35,14 @@ async function runTests() {
   console.log("\nTest 2: Daily Limit Policy");
   const agent2 = new AgentWallet({
     privateKey,
+    agentId,
     policy: policy().dailyLimit(0.005).build(),
   });
+  await agent2.init();
 
   try {
     (agent2 as any).dailySpent = parseEther("0.004");
-    (agent2 as any).checkPolicy(target, parseEther("0.002"));
+    await (agent2 as any).checkPolicy(target, parseEther("0.002"));
     console.log("❌ Test 2 Failed: Did not throw on dailyLimit violation");
   } catch (e: any) {
     if (e.message.includes("daily limit")) {
@@ -55,8 +56,10 @@ async function runTests() {
   console.log("\nTest 3: Daily Limit Reset");
   const agent3 = new AgentWallet({
     privateKey,
+    agentId,
     policy: policy().dailyLimit(0.005).build(),
   });
+  await agent3.init();
 
   (agent3 as any).dailySpent = parseEther("0.004");
   const yesterday = new Date();
@@ -64,7 +67,7 @@ async function runTests() {
   (agent3 as any).dayStart = yesterday;
 
   try {
-    (agent3 as any).checkPolicy(target, parseEther("0.002"));
+    await (agent3 as any).checkPolicy(target, parseEther("0.002"));
     console.log("✅ Test 3 Passed: Daily limit reset correctly");
     if ((agent3 as any).dailySpent !== 0n) {
         console.log("❌ Test 3 Failed: dailySpent not reset to 0n");
@@ -78,18 +81,20 @@ async function runTests() {
   const allowed = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
   const agent4 = new AgentWallet({
     privateKey,
+    agentId,
     policy: policy().allowOnly([allowed]).build(),
   });
+  await agent4.init();
 
   try {
-    (agent4 as any).checkPolicy(allowed, parseEther("0.001"));
+    await (agent4 as any).checkPolicy(allowed, parseEther("0.001"));
     console.log("✅ Test 4.1 Passed: Allowed address accepted");
   } catch (e: any) {
     console.log("❌ Test 4.1 Failed: Threw on allowed address", e.message);
   }
 
   try {
-    (agent4 as any).checkPolicy("0x0000000000000000000000000000000000000000", parseEther("0.001"));
+    await (agent4 as any).checkPolicy("0x0000000000000000000000000000000000000000", parseEther("0.001"));
     console.log("❌ Test 4.2 Failed: Did not throw on unauthorized address");
   } catch (e: any) {
     if (e.message.includes("not in the allowed list")) {
@@ -99,7 +104,9 @@ async function runTests() {
     }
   }
 
-  if (fs.existsSync(STATE_FILE)) fs.unlinkSync(STATE_FILE);
+  // Cleanup state files
+  const files = fs.readdirSync(process.cwd()).filter(f => f.startsWith(".agentpay-state-policy-agent-"));
+  files.forEach(f => fs.unlinkSync(f));
 }
 
 runTests().catch(console.error);

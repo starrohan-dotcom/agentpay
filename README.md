@@ -29,10 +29,11 @@ npm install @starrohan/agentpay
 ## Quickstart — 3 lines
 
 ```ts
+import "dotenv/config";
 import { AgentWallet, policy } from "@starrohan/agentpay";
 
 const agent = new AgentWallet({
-  privateKey: "0xYOUR_PRIVATE_KEY",
+  privateKey: process.env.AGENT_PRIVATE_KEY as `0x${string}`,
   agentId: "my-agent",
   policy: policy().maxTx(0.001).dailyLimit(0.01).build()
 });
@@ -107,7 +108,9 @@ Error: [AgentPay] Policy violation: tx amount 99 ETH exceeds maxTxAmount 0.001 E
 
 ## Security
 
-- ✅ **Persistent state** — daily limits and transaction history survive agent restarts
+- ✅ **Persistent state** — daily limits and transaction history survive agent restarts (supports File, Redis, or SQL)
+- ✅ **Smart Accounts (ERC-7579)** — optional on-chain wallet for "un-hackable" security
+- ✅ **USDC Support** — native stablecoin payments on Base
 - ✅ **BigInt math** — all internal calculations use Wei for absolute precision (no floating-point errors)
 - ✅ **Environment variables** — secure private key management via `.env` support
 - ✅ **Policy enforcement** — autonomous guardrails that cannot be bypassed by agent logic
@@ -208,9 +211,15 @@ class AgentPayTool extends Tool {
 
 ## Network
 
-Currently running on **Base Sepolia testnet**. Mainnet support coming in v0.2.
+Supports **Base Sepolia testnet** and **Base Mainnet**.
 
-Get free testnet ETH: [coinbase.com/faucets/base-ethereum-sepolia-faucet](https://coinbase.com/faucets/base-ethereum-sepolia-faucet)
+To use Mainnet, simply provide a Mainnet RPC URL in the config:
+```ts
+const agent = new AgentWallet({
+  privateKey: "0x...",
+  rpcUrl: "https://mainnet.base.org" // Default is Base Sepolia
+});
+```
 
 ---
 
@@ -219,9 +228,10 @@ Get free testnet ETH: [coinbase.com/faucets/base-ethereum-sepolia-faucet](https:
 - [x] AgentWallet class with pay, balance, history
 - [x] Spending policy engine (maxTx, dailyLimit, allowlist)
 - [x] Base Sepolia testnet
+- [x] Persistent state & BigInt precision (v1.1.1)
+- [x] USDC support (v1.2.0)
+- [x] Smart Account (ERC-7579) integration (v1.2.0)
 - [ ] LangChain / AutoGen / CrewAI plugins
-- [ ] Base mainnet + USDC support
-- [ ] Smart contract policy enforcement (on-chain)
 - [ ] Enterprise dashboard
 - [ ] Agent-to-agent payments
 
