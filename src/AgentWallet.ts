@@ -165,7 +165,7 @@ export class AgentWallet {
       const account = privateKeyToAccount(this.config.privateKey);
       const chain = this.config.rpcUrl?.includes("mainnet") ? base : baseSepolia;
 
-      const safeAccount = await toSafeSmartAccount(this.publicClient, {
+      const safeAccount = await toSafeSmartAccount({
         client: this.publicClient,
         signer: account,
         safeVersion: "1.4.1",
@@ -179,10 +179,7 @@ export class AgentWallet {
         account: safeAccount,
         chain,
         bundlerTransport: http(this.config.bundlerUrl ?? (chain.id === 8453 ? "https://api.pimlico.io/v2/base/rpc?apikey=YOUR_API_KEY" : "https://api.pimlico.io/v2/base-sepolia/rpc?apikey=YOUR_API_KEY")),
-        middleware: {
-            gasPrice: async () => (await this.publicClient.getGasPrice()),
-        }
-      });
+      } as any);
 
       this.address = safeAccount.address;
       console.log(`[AgentPay] Smart Account initialized at ${this.address}`);
