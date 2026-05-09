@@ -1,9 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { AgentWallet } from "../AgentWallet.js";
 import express from "express";
 import "dotenv/config";
@@ -27,7 +24,7 @@ if (!privateKey) {
 const wallet = new AgentWallet({
   privateKey,
   agentId: process.env.AGENT_ID || "cloud-agent",
-  rpcUrl: process.env.RPC_URL
+  rpcUrl: process.env.RPC_URL,
 });
 
 const server = new Server(
@@ -39,7 +36,7 @@ const server = new Server(
     capabilities: {
       tools: {},
     },
-  }
+  },
 );
 
 // ── List available tools ──

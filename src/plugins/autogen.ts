@@ -18,10 +18,10 @@ export function getAutoGenPayTool(wallet: AgentWallet) {
           action: { type: "string", enum: ["pay", "balance"] },
           to: { type: "string", description: "Recipient address" },
           amount: { type: "number", description: "Amount in ETH or USDC" },
-          token: { type: "string", enum: ["ETH", "USDC"], default: "ETH" }
+          token: { type: "string", enum: ["ETH", "USDC"], default: "ETH" },
         },
-        required: ["action"]
-      }
+        required: ["action"],
+      },
     },
     implementation: async ({ action, to, amount, token = "ETH" }: any) => {
       try {
@@ -39,6 +39,6 @@ export function getAutoGenPayTool(wallet: AgentWallet) {
       } catch (err: any) {
         return `[AgentPay] Error: ${err.message}`;
       }
-    }
+    },
   };
 }

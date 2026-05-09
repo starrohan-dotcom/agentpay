@@ -16,7 +16,7 @@ async function runSelfSustainingAgent() {
     agentId: "openai-sustainer",
     policy: policy()
       .dailyLimit(0.01) // Max $30 worth of ETH/USDC per day
-      .build()
+      .build(),
   });
 
   await agent.init();
@@ -39,7 +39,7 @@ async function runSelfSustainingAgent() {
       to: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F", // Provider address
       amount: 5.0,
       token: "USDC",
-      memo: "Payment for GPT-4o usage (1M tokens)"
+      memo: "Payment for GPT-4o usage (1M tokens)",
     });
 
     console.log(`✅ Paid for work. Tx: ${tx.hash}`);
