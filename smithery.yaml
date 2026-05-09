@@ -1,0 +1,22 @@
+# Smithery Configuration
+# This allows users to find and install AgentPay via the Smithery Marketplace
+
+name: agentpay
+version: 1.2.0
+description: The wallet protocol for AI agents. Give your agent a wallet and spending policies.
+author: starrohan
+license: MIT
+
+# How to run the server
+startCommand:
+  command: npx
+  args: ["-y", "@starrohan/agentpay", "mcp"]
+
+# Environment variables needed
+environmentVariables:
+  - name: AGENT_PRIVATE_KEY
+    description: The private key of the agent's wallet (0x...)
+    required: true
+  - name: RPC_URL
+    description: The RPC URL for the chain (Defaults to Base Sepolia)
+    required: false

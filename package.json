@@ -35,7 +35,11 @@
     "viem",
     "base",
     "web3",
-    "crypto"
+    "crypto",
+    "mcp",
+    "mcp-server",
+    "claude",
+    "autonomous-agents"
   ],
   "author": "",
   "license": "MIT",
