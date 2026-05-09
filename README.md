@@ -86,6 +86,12 @@ Are you building something with AgentPay? Submit a PR to add your project here!
 
 - **[Your Project Name]** — A brief description of what your agent does.
 
+### Badges
+
+Show the world your agent is self-funded:
+
+`[![Powered by AgentPay](https://raw.githubusercontent.com/starrohan-dotcom/agentpay/main/assets/powered-by.svg)](https://github.com/starrohan-dotcom/agentpay)`
+
 ---
 
 ## Integrations
@@ -157,6 +163,13 @@ AgentPay supports the **Model Context Protocol (MCP)**. You can give your Claude
 ```
 
 3.  Restart Claude. You will now see a 💳 icon, and you can ask Claude: *"What is my wallet balance?"* or *"Send 0.001 ETH to 0x..."*
+
+### Claude Code (CLI)
+
+If you use Anthropic's terminal agent, run:
+```bash
+claude mcp add agentpay npx -y @starrohan/agentpay mcp
+```
 
 ### Roo Code (VS Code)
 
