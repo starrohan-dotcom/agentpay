@@ -32,6 +32,7 @@ npx agentpay
 ```
 
 [![Deploy to Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/starrohan-dotcom/agentpay&envs=AGENT_PRIVATE_KEY,RPC_URL)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/D8609M?referralCode=agentpay)
 [![Deploy on Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/starrohan-dotcom/agentpay&env=AGENT_PRIVATE_KEY,RPC_URL)
 
 ---
@@ -98,7 +99,7 @@ Show the world your agent is self-funded:
 
 ### LangChain
 
-AgentPay provides an official LangChain tool for easy integration.
+AgentPay provides an official LangChain tool for easy integration. (Status: [Submission Pending](https://github.com/langchain-ai/langchain/issues))
 
 ```ts
 import { AgentWallet, AgentPayTool } from "@starrohan/agentpay";
@@ -139,7 +140,9 @@ const { schema, implementation } = getAutoGenPayTool(wallet);
 
 ### Claude Desktop / MCP
 
-AgentPay supports the **Model Context Protocol (MCP)**. You can give your Claude Desktop AI a wallet in 60 seconds.
+AgentPay supports the **Model Context Protocol (MCP)**. (Status: [Official Registry Submission Pending](https://github.com/modelcontextprotocol/servers/pulls))
+
+You can give your Claude Desktop AI a wallet in 60 seconds.
 
 1.  Open your Claude Desktop config:
     - **macOS:** `~/Library/Application\ Support/Claude/claude_desktop_config.json`
@@ -195,6 +198,24 @@ AgentPay works perfectly with **Roo Code**.
 ```
 
 4.  Roo Code will automatically detect the new tools. You can now tell Roo: *"Pay for the API credits using my AgentPay wallet."*
+
+### Hosted MCP (Railway/Vercel)
+
+If you don't want to run AgentPay locally, you can use the **Hosted Version**.
+
+1.  Click the **Deploy to Railway** button at the top of this README.
+2.  Once deployed, you will get a URL (e.g., `https://agentpay-production.up.railway.app`).
+3.  In your Claude/Roo Code config, use the `sse` transport:
+
+```json
+{
+  "mcpServers": {
+    "agentpay": {
+      "url": "https://your-railway-url.app/sse"
+    }
+  }
+}
+```
 
 ---
 
