@@ -1,6 +1,7 @@
 {
   "name": "@starrohan/agentpay",
   "version": "1.3.0",
+  "mcpName": "io.github.starrohan-dotcom/agentpay",
   "description": "Autonomous agent wallets with built-in spending policies for Ethereum",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -20,6 +21,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "start": "node dist/mcp/web-server.js",
     "prepublishOnly": "npm run build",
     "example": "tsx example.ts",
     "mcp": "tsx src/mcp/server.ts",
@@ -51,6 +53,7 @@
     "viem": "^2.0.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^25.6.2",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
@@ -60,6 +63,7 @@
     "@langchain/core": "^1.1.45",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "permissionless": "^0.3.5"
   }
 }
