@@ -57,12 +57,13 @@ function writeIfMissing(filename, content) {
     }
 }
 
-try {
-    writeIfMissing('.env', ENV_TEMPLATE);
-    writeIfMissing('.gitignore', GITIGNORE_TEMPLATE);
-    writeIfMissing('agent.ts', SAMPLE_CODE);
+async function initProject() {
+    try {
+        writeIfMissing('.env', ENV_TEMPLATE);
+        writeIfMissing('.gitignore', GITIGNORE_TEMPLATE);
+        writeIfMissing('agent.ts', SAMPLE_CODE);
 
-    console.log(`
+        console.log(`
 ─────────────────────────────────────────────
 🚀 Setup complete!
 
@@ -72,6 +73,20 @@ Next steps:
 
 Build the future of autonomous agents.
 `);
-} catch (err) {
-    console.error('❌ Setup failed:', err.message);
+    } catch (err) {
+        console.error('❌ Setup failed:', err.message);
+    }
+}
+
+const command = process.argv[2];
+
+if (command === 'mcp') {
+    // Dynamically import the MCP server to avoid loading it during project init
+    import('../dist/mcp/server.js').catch(err => {
+        console.error('❌ Failed to start MCP server. Have you run "npm run build"?');
+        console.error(err.message);
+        process.exit(1);
+    });
+} else {
+    initProject();
 }

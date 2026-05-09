@@ -31,6 +31,9 @@ Initialize your agent project in 5 seconds:
 npx agentpay
 ```
 
+[![Deploy to Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/starrohan-dotcom/agentpay&envs=AGENT_PRIVATE_KEY,RPC_URL)
+[![Deploy on Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/starrohan-dotcom/agentpay&env=AGENT_PRIVATE_KEY,RPC_URL)
+
 ---
 
 ## Usage — 3 lines
@@ -74,6 +77,14 @@ Check out our [examples/](https://github.com/starrohan-dotcom/agentpay/tree/main
 - 🤖 **[Claude Desktop / MCP Support](https://github.com/starrohan-dotcom/agentpay#claude-desktop--mcp)** — Use AgentPay directly in Claude with zero code.
 - 🤖 **[Self-Sustaining Agent](https://github.com/starrohan-dotcom/agentpay/blob/main/examples/self-sustaining-agent.ts)** — An agent that pays for its own OpenAI/Anthropic API usage.
 - 🕵️ **Autonomous Researcher** — Paying for premium data and search APIs.
+
+---
+
+## 🌟 Agent Showcase
+
+Are you building something with AgentPay? Submit a PR to add your project here!
+
+- **[Your Project Name]** — A brief description of what your agent does.
 
 ---
 
