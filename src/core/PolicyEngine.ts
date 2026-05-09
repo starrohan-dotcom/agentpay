@@ -3,9 +3,23 @@ import { type SpendingPolicy } from "../AgentWallet.js";
 import { AgentPayError, ErrorCode } from "../utils/errors.js";
 import { logger } from "../utils/logger.js";
 
+/**
+ * PolicyEngine handles the validation of transactions against spending rules.
+ */
 export class PolicyEngine {
   constructor(private policy: SpendingPolicy) {}
 
+  /**
+   * Validates a transaction against the current spending policy.
+   *
+   * @throws {AgentPayError} if any policy rule is violated.
+   *
+   * @param to The recipient's wallet address.
+   * @param amount The transaction amount in base units (Wei or base USDC).
+   * @param token The token being sent ("ETH" or "USDC").
+   * @param dailySpentETH The total ETH spent by this agent today in Wei.
+   * @param dailySpentUSDC The total USDC spent by this agent today in base units.
+   */
   public validate(
     to: Address,
     amount: bigint,

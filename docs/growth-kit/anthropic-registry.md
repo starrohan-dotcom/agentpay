@@ -26,6 +26,16 @@ To reach 10,000 users, we need to be listed in the [Official Anthropic MCP Regis
       "name": "RPC_URL",
       "description": "The RPC URL for the chain (Defaults to Base Sepolia)",
       "required": false
+    },
+    {
+      "name": "USE_SMART_ACCOUNT",
+      "description": "Set to 'true' to use Safe Smart Accounts",
+      "required": false
+    },
+    {
+      "name": "BUNDLER_URL",
+      "description": "ERC-4337 Bundler URL (Required if USE_SMART_ACCOUNT is true)",
+      "required": false
     }
   ],
   "tags": ["finance", "crypto", "wallet", "payments", "base", "autonomous-agents"]

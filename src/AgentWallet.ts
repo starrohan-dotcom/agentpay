@@ -18,78 +18,80 @@ import { createSmartAccountClient } from "permissionless";
 import { toSafeSmartAccount } from "permissionless/accounts";
 import { logger } from "./utils/logger.js";
 import { AgentPayError, ErrorCode } from "./utils/errors.js";
-import { WalletConfigSchema, PayOptionsSchema } from "./utils/validation.js";
+import {
+  type WalletConfig,
+  type PayOptions,
+  type SpendingPolicy,
+  WalletConfigSchema,
+  PayOptionsSchema,
+} from "./utils/validation.js";
 import { PolicyEngine } from "./core/PolicyEngine.js";
 
 // ─────────────────────────────────────────────
 // TYPES
 // ─────────────────────────────────────────────
 
-export interface SpendingPolicy {
-  maxTxAmount?: number;
-  dailyLimit?: number;
-  allowedAddresses?: Address[];
-  requireLogAbove?: number;
-}
+export type { WalletConfig, PayOptions, SpendingPolicy };
 
-export interface PayOptions {
-  to: Address;
-  amount: number;
-  token?: "ETH" | "USDC";
-  memo?: string;
-}
-
+/**
+ * A record of a performed transaction.
+ */
 export interface TxRecord {
+  /** Transaction hash on the blockchain. */
   hash: Hash;
+  /** Recipient address. */
   to: Address;
+  /** Amount sent. */
   amount: number;
+  /** Label provided for the payment. */
   memo?: string;
+  /** Timestamp of the transaction. */
   timestamp: Date;
+  /** Final status of the payment. */
   status: "success" | "failed";
-}
-
-export interface WalletConfig {
-  privateKey: `0x${string}`;
-  agentId?: string;
-  policy?: SpendingPolicy;
-  rpcUrl?: string;
-  storage?: StorageProvider;
-  useSmartAccount?: boolean;
-  bundlerUrl?: string;
 }
 
 // ─────────────────────────────────────────────
 // POLICY BUILDER
 // ─────────────────────────────────────────────
 
+/**
+ * Fluent API for building a SpendingPolicy.
+ */
 export class PolicyBuilder {
   private rules: SpendingPolicy = {};
 
+  /** Set the maximum amount per transaction. */
   maxTx(amount: number): PolicyBuilder {
     this.rules.maxTxAmount = amount;
     return this;
   }
 
+  /** Set the total daily spending limit. */
   dailyLimit(amount: number): PolicyBuilder {
     this.rules.dailyLimit = amount;
     return this;
   }
 
+  /** restrict payments to a specific list of addresses. */
   allowOnly(addresses: Address[]): PolicyBuilder {
     this.rules.allowedAddresses = addresses;
     return this;
   }
 
+  /** Trigger a log warning for large payments. */
   warnAbove(amount: number): PolicyBuilder {
     this.rules.requireLogAbove = amount;
     return this;
   }
 
+  /** Return the final SpendingPolicy object. */
   build(): SpendingPolicy {
     return this.rules;
   }
 }
 
+/** Utility to start building a spending policy. */
 export const policy = () => new PolicyBuilder();
 
 // ─────────────────────────────────────────────
@@ -125,9 +127,13 @@ const ERC20_ABI = [
   },
 ] as const;
 
+/**
+ * AgentWallet is the primary interface for giving AI agents autonomous
+ * financial capabilities on Base.
+ */
 export class AgentWallet {
   private walletClient: WalletClient;
-  private smartAccountClient: any;
+  private smartAccountClient?: any;
   private publicClient: PublicClient;
   private policyEngine: PolicyEngine;
   private txHistory: TxRecord[] = [];
@@ -137,7 +143,9 @@ export class AgentWallet {
   private storage: StorageProvider;
   private isInitialized: boolean = false;
 
+  /** The public wallet address of the agent. */
   public address: Address;
+  /** The unique identifier for this agent. */
   public agentId: string;
   private config: WalletConfig;
 
@@ -145,10 +153,10 @@ export class AgentWallet {
     const validated = WalletConfigSchema.parse(config);
     this.config = validated as WalletConfig;
 
-    const account = privateKeyToAccount(this.config.privateKey);
+    const account = privateKeyToAccount(this.config.privateKey as `0x${string}`);
     this.address = account.address;
     this.agentId = this.config.agentId ?? "agent-" + account.address.slice(0, 6).toLowerCase();
-    this.storage = this.config.storage ?? new FileStorage();
+    this.storage = (this.config.storage as StorageProvider) ?? new FileStorage();
     this.policyEngine = new PolicyEngine(this.config.policy ?? {});
 
     const chain = this.config.rpcUrl?.includes("mainnet") ? base : baseSepolia;
@@ -167,16 +175,23 @@ export class AgentWallet {
     }) as PublicClient;
   }
 
+  /**
+   * Initializes the wallet, loads persistent state, and sets up
+   * Smart Account clients if enabled.
+   *
+   * @async
+   * @returns {Promise<void>}
+   */
   async init(): Promise<void> {
     if (this.isInitialized) return;
 
     await this.loadState();
 
     if (this.config.useSmartAccount) {
-      const account = privateKeyToAccount(this.config.privateKey);
+      const account = privateKeyToAccount(this.config.privateKey as `0x${string}`);
       const chain = this.config.rpcUrl?.includes("mainnet") ? base : baseSepolia;
 
-      const safeAccount = await toSafeSmartAccount({
+      const safeAccount = (await toSafeSmartAccount({
         client: this.publicClient,
         signer: account,
         safeVersion: "1.4.1",
@@ -184,17 +199,19 @@ export class AgentWallet {
           address: "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
           version: "0.7",
         },
-      } as any);
+      } as any)) as any;
+
+      if (!this.config.bundlerUrl) {
+        throw new AgentPayError(
+          ErrorCode.INITIALIZATION_REQUIRED,
+          "bundlerUrl is required when useSmartAccount is true.",
+        );
+      }
 
       this.smartAccountClient = createSmartAccountClient({
         account: safeAccount,
         chain,
-        bundlerTransport: http(
-          this.config.bundlerUrl ??
-            (chain.id === 8453
-              ? "https://api.pimlico.io/v2/base/rpc?apikey=YOUR_API_KEY"
-              : "https://api.pimlico.io/v2/base-sepolia/rpc?apikey=YOUR_API_KEY"),
-        ),
+        bundlerTransport: http(this.config.bundlerUrl),
       } as any);
 
       this.address = safeAccount.address;
@@ -222,6 +239,7 @@ export class AgentWallet {
     }
   }
 
+  /** @internal */
   private async saveState(): Promise<void> {
     try {
       const state = {
@@ -236,6 +254,7 @@ export class AgentWallet {
     }
   }
 
+  /** @internal */
   private async checkDailyReset(): Promise<void> {
     const now = new Date();
     const hoursSinceDayStart = (now.getTime() - this.dayStart.getTime()) / (1000 * 60 * 60);
@@ -248,6 +267,14 @@ export class AgentWallet {
     }
   }
 
+  /**
+   * Executes an autonomous payment in ETH or USDC.
+   *
+   * @async
+   * @param {PayOptions} opts Payment destination, amount, and token.
+   * @returns {Promise<TxRecord>} The transaction receipt record.
+   * @throws {AgentPayError} if initialization is missing or policy is violated.
+   */
   async pay(opts: PayOptions): Promise<TxRecord> {
     if (!this.isInitialized) {
       throw new AgentPayError(
@@ -275,12 +302,14 @@ export class AgentWallet {
     logger.info(`Processing payment`, { agentId: this.agentId, amount, token, to });
 
     let hash: Hash;
-    const status: "success" | "failed" = "success";
 
     try {
-      if (this.config.useSmartAccount) {
+      if (this.config.useSmartAccount && this.smartAccountClient) {
         if (token === "ETH") {
-          hash = await this.smartAccountClient.sendTransaction({ to, value: amountInBaseUnits });
+          hash = await this.smartAccountClient.sendTransaction({
+            to: to as Address,
+            value: amountInBaseUnits,
+          });
         } else {
           hash = await this.smartAccountClient.sendTransaction({
             to: USDC_ADDRESS,
@@ -293,7 +322,10 @@ export class AgentWallet {
         }
       } else {
         if (token === "ETH") {
-          hash = await (this.walletClient as any).sendTransaction({ to, value: amountInBaseUnits });
+          hash = await (this.walletClient as any).sendTransaction({
+            to: to as Address,
+            value: amountInBaseUnits,
+          });
         } else {
           const { request } = await this.publicClient.simulateContract({
             account: this.walletClient.account,
@@ -317,7 +349,7 @@ export class AgentWallet {
       const failedHash = "0x0000000000000000000000000000000000000000000000000000000000000000";
       const failedRecord: TxRecord = {
         hash: failedHash,
-        to,
+        to: to as Address,
         amount,
         memo,
         timestamp: new Date(),
@@ -328,11 +360,25 @@ export class AgentWallet {
       throw new AgentPayError(ErrorCode.TRANSACTION_FAILED, err.message, err);
     }
 
-    const record: TxRecord = { hash, to, amount, memo, timestamp: new Date(), status };
+    const record: TxRecord = {
+      hash,
+      to: to as Address,
+      amount,
+      memo,
+      timestamp: new Date(),
+      status: "success",
+    };
     this.txHistory.push(record);
     return record;
   }
 
+  /**
+   * Fetches the current balance for the agent's wallet.
+   *
+   * @async
+   * @param {"ETH" | "USDC"} token The currency to check.
+   * @returns {Promise<string>} Balance formatted as a human-readable string.
+   */
   async balance(token: "ETH" | "USDC" = "ETH"): Promise<string> {
     if (token === "ETH") {
       const raw = await this.publicClient.getBalance({ address: this.address });
@@ -352,19 +398,33 @@ export class AgentWallet {
     }
   }
 
+  /**
+   * Returns the transaction history for this agent session.
+   */
   history(): TxRecord[] {
     return this.txHistory;
   }
 
+  /**
+   * Returns how much has been spent today in the specified token.
+   */
   dailySpentSoFar(token: "ETH" | "USDC" = "ETH"): string {
     return token === "ETH"
       ? formatEther(this.dailySpentETH)
       : (Number(this.dailySpentUSDC) / 1_000_000).toString();
   }
 
+  /**
+   * Logs a professional summary of the agent's financial status to the console.
+   */
   async summary(): Promise<void> {
     const balETH = await this.balance("ETH");
-    const balUSDC = await this.balance("USDC");
+    let balUSDC = "0.00";
+    try {
+      balUSDC = await this.balance("USDC");
+    } catch {
+      // Fallback
+    }
     const spentETH = this.dailySpentSoFar("ETH");
     const spentUSDC = this.dailySpentSoFar("USDC");
 

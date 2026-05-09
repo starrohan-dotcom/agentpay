@@ -25,6 +25,8 @@ const wallet = new AgentWallet({
   privateKey,
   agentId: process.env.AGENT_ID || "cloud-agent",
   rpcUrl: process.env.RPC_URL,
+  useSmartAccount: process.env.USE_SMART_ACCOUNT === "true",
+  bundlerUrl: process.env.BUNDLER_URL,
 });
 
 const server = new Server(

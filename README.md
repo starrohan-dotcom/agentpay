@@ -88,12 +88,23 @@ Give your Claude Desktop AI a wallet in 60 seconds.
       "args": ["-y", "@starrohan/agentpay", "mcp"],
       "env": {
         "AGENT_PRIVATE_KEY": "0xYOUR_PRIVATE_KEY_HERE",
-        "RPC_URL": "https://sepolia.base.org"
+        "RPC_URL": "https://sepolia.base.org",
+        "USE_SMART_ACCOUNT": "true",
+        "BUNDLER_URL": "https://api.pimlico.io/v2/base-sepolia/rpc?apikey=YOUR_API_KEY"
       }
     }
   }
 }
 ```
+
+### Advanced Config
+| Env Var | Description |
+|---------|-------------|
+| `AGENT_PRIVATE_KEY` | Hex-encoded private key (starts with 0x) |
+| `RPC_URL` | Base or Base Sepolia RPC URL |
+| `USE_SMART_ACCOUNT` | Set to `true` to use Safe Smart Accounts |
+| `BUNDLER_URL` | ERC-4337 Bundler URL (Required if `USE_SMART_ACCOUNT` is true) |
+| `AGENT_ID` | Custom identifier for state persistence |
 
 3.  **Restart Claude.** You will now see a 💳 icon. Ask Claude: *"What is my wallet balance?"*
 
