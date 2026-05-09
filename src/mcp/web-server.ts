@@ -144,6 +144,10 @@ Spent Today: ${spentETH} ETH | ${spentUSDC} USDC
 
 let transport: SSEServerTransport | null = null;
 
+app.get("/", (req, res) => {
+  res.status(200).send("AgentPay Cloud MCP Server is running.");
+});
+
 app.get("/sse", async (req, res) => {
   console.log("New SSE connection");
   transport = new SSEServerTransport("/message", res);
