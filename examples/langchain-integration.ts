@@ -15,19 +15,20 @@ export async function getAgentPayTool(privateKey: `0x${string}`) {
 
   return new DynamicTool({
     name: "agent_wallet",
-    description: "Use this tool to pay for external services or check your own crypto balance. Input should be a JSON string like: { \"action\": \"pay\", \"to\": \"0x...\", \"amount\": 0.001, \"token\": \"ETH\"| \"USDC\" }",
+    description:
+      'Use this tool to pay for external services or check your own crypto balance. Input should be a JSON string like: { "action": "pay", "to": "0x...", "amount": 0.001, "token": "ETH"| "USDC" }',
     func: async (input: string) => {
       try {
         const { action, to, amount, token } = JSON.parse(input);
 
         if (action === "balance") {
-            const bal = await agent.balance(token || "ETH");
-            return `My current balance is ${bal} ${token || "ETH"}`;
+          const bal = await agent.balance(token || "ETH");
+          return `My current balance is ${bal} ${token || "ETH"}`;
         }
 
         if (action === "pay") {
-            const tx = await agent.pay({ to, amount, token: token || "ETH" });
-            return `Successfully paid ${amount} ${token || "ETH"} to ${to}. Transaction hash: ${tx.hash}`;
+          const tx = await agent.pay({ to, amount, token: token || "ETH" });
+          return `Successfully paid ${amount} ${token || "ETH"} to ${to}. Transaction hash: ${tx.hash}`;
         }
 
         return "Invalid action. Use 'pay' or 'balance'.";

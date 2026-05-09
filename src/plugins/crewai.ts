@@ -10,7 +10,8 @@ import { AgentWallet } from "../AgentWallet.js";
 export function createCrewAIPayTool(wallet: AgentWallet) {
   return {
     name: "agent_wallet",
-    description: "Use this tool to pay for external services or check your own crypto balance on Base. Input should be a JSON string: { \"action\": \"pay\" | \"balance\", \"to\": \"0x...\", \"amount\": 0.001, \"token\": \"ETH\" | \"USDC\" }",
+    description:
+      'Use this tool to pay for external services or check your own crypto balance on Base. Input should be a JSON string: { "action": "pay" | "balance", "to": "0x...", "amount": 0.001, "token": "ETH" | "USDC" }',
     func: async (input: string) => {
       try {
         const { action, to, amount, token = "ETH" } = JSON.parse(input);
@@ -29,6 +30,6 @@ export function createCrewAIPayTool(wallet: AgentWallet) {
       } catch (err: any) {
         return `[AgentPay] Error: ${err.message}`;
       }
-    }
+    },
   };
 }
