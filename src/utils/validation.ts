@@ -7,15 +7,27 @@ export const SpendingPolicySchema = z.object({
   requireLogAbove: z.number().optional(),
 });
 
+export type SpendingPolicy = z.infer<typeof SpendingPolicySchema>;
+
 export const WalletConfigSchema = z.object({
   privateKey: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
   agentId: z.string().optional(),
   policy: SpendingPolicySchema.optional(),
   rpcUrl: z.string().url().optional(),
-  storage: z.any().optional(), // StorageProvider is verified manually
+  storage: z.any().optional(),
   useSmartAccount: z.boolean().optional().default(false),
   bundlerUrl: z.string().url().optional(),
 });
+
+export type WalletConfig = {
+  privateKey: `0x${string}`;
+  agentId?: string;
+  policy?: SpendingPolicy;
+  rpcUrl?: string;
+  storage?: any;
+  useSmartAccount?: boolean;
+  bundlerUrl?: string;
+};
 
 export const PayOptionsSchema = z.object({
   to: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
@@ -23,3 +35,10 @@ export const PayOptionsSchema = z.object({
   token: z.enum(["ETH", "USDC"]).optional().default("ETH"),
   memo: z.string().optional(),
 });
+
+export type PayOptions = {
+  to: `0x${string}`;
+  amount: number;
+  token?: "ETH" | "USDC";
+  memo?: string;
+};

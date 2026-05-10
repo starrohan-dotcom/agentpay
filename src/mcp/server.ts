@@ -21,12 +21,14 @@ const wallet = new AgentWallet({
   privateKey,
   agentId: process.env.AGENT_ID || "mcp-agent",
   rpcUrl: process.env.RPC_URL,
+  useSmartAccount: process.env.USE_SMART_ACCOUNT === "true",
+  bundlerUrl: process.env.BUNDLER_URL,
 });
 
 const server = new Server(
   {
     name: "agentpay",
-    version: "1.2.0",
+    version: "1.3.0",
   },
   {
     capabilities: {

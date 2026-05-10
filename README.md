@@ -52,7 +52,7 @@ await agent.pay({ to: "0xRECIPIENT", amount: 0.00001, memo: "API request" });
 AgentPay is framework-agnostic. Give your favorite AI a wallet instantly.
 
 ### Claude Desktop / MCP
-Supports **Model Context Protocol (MCP)**. Give Claude a wallet with zero code. [See setup guide](https://github.com/starrohan-dotcom/agentpay#claude-desktop--mcp).
+Supports **Model Context Protocol (MCP)**. Give Claude a wallet with zero code. [See setup guide](#-mcp-setup-guide).
 
 ### Frameworks
 - 🦜 **LangChain:** Official `AgentPayTool` integration.
@@ -67,6 +67,46 @@ Are you building something with AgentPay? [Submit a PR](https://github.com/starr
 
 - **[Self-Sustaining Researcher]** — An agent that pays for its own OpenAI usage.
 - **[LangChain Wallet Agent]** — A basic agent with autonomous payment skills.
+
+---
+
+## 🛠 MCP Setup Guide
+
+Give your Claude Desktop AI a wallet in 60 seconds.
+
+1.  **Open your Claude Desktop config:**
+    - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+    - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+2.  **Add AgentPay to the `mcpServers` list:**
+
+```json
+{
+  "mcpServers": {
+    "agentpay": {
+      "command": "npx",
+      "args": ["-y", "@starrohan/agentpay", "mcp"],
+      "env": {
+        "AGENT_PRIVATE_KEY": "0xYOUR_PRIVATE_KEY_HERE",
+        "RPC_URL": "https://sepolia.base.org",
+        "USE_SMART_ACCOUNT": "true",
+        "BUNDLER_URL": "https://api.pimlico.io/v2/base-sepolia/rpc?apikey=YOUR_API_KEY"
+      }
+    }
+  }
+}
+```
+
+### Advanced Config
+| Env Var | Description |
+|---------|-------------|
+| `AGENT_PRIVATE_KEY` | Hex-encoded private key (starts with 0x) |
+| `RPC_URL` | Base or Base Sepolia RPC URL |
+| `USE_SMART_ACCOUNT` | Set to `true` to use Safe Smart Accounts |
+| `BUNDLER_URL` | ERC-4337 Bundler URL (Required if `USE_SMART_ACCOUNT` is true) |
+| `AGENT_ID` | Custom identifier for state persistence |
+
+3.  **Restart Claude.** You will now see a 💳 icon. Ask Claude: *"What is my wallet balance?"*
 
 ---
 
