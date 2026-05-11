@@ -3,7 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 
-let version = "1.2.0";
+let version = "1.4.0";
 try {
     const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
     version = pkg.version;
