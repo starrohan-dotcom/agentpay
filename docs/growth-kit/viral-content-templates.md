@@ -22,13 +22,13 @@ Built on @Base L2 for near-zero fees and sub-second settlement.
 It’s not just a wallet; it’s a financial guardrail. 🛡️
 
 **Tweet 3:**
-Institutional security is built-in:
-✅ Safe (ERC-7579) Smart Accounts
+Institutional-grade guardrails are built-in:
+✅ Optional smart-account support
 ✅ Native USDC support
 ✅ Daily limits that survive restarts
 ✅ 100% BigInt precision
 
-Your agent can’t go rogue and drain your wallet.
+Your agent gets spending policies before transactions are signed.
 
 **Tweet 4:**
 The integration is universal:
@@ -61,7 +61,7 @@ I’m building AgentPay because I realized that for AI agents to be truly autono
 
 Today, if an agent needs to pay for an API, data, or compute, a human has to click "approve." AgentPay changes that.
 
-It provides a secure, policy-enforced wallet layer. We use Safe (ERC-7579) smart accounts on the backend so you can set daily limits and recipient allowlists. If the agent gets compromised, your funds stay safe.
+It provides a secure, policy-enforced wallet layer. The SDK checks daily limits and recipient allowlists before signing transactions, and smart-account integrations can strengthen production deployments when configured.
 
 We just launched an MCP server, so you can drop it into Claude Desktop or Roo Code and ask your AI to pay for things directly in chat.
 

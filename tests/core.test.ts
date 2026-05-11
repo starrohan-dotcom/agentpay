@@ -1,9 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { AgentWallet, policy } from "../src/index.js";
 import { generatePrivateKey } from "viem/accounts";
 import { parseEther } from "viem";
-import fs from "fs";
-import path from "path";
 
 describe("AgentPay Core Logic", () => {
   const privateKey = generatePrivateKey();
@@ -16,14 +14,14 @@ describe("AgentPay Core Logic", () => {
     });
     await agent.init();
 
-    // @ts-ignore - testing private engine
+    // @ts-expect-error - testing private engine - testing private engine
     const engine = agent.policyEngine;
 
-    expect(() => engine.validate(target, parseEther("0.002"), "ETH", 0n, 0n))
-      .toThrow(/exceeds maxTxAmount/);
+    expect(() => engine.validate(target, parseEther("0.002"), "ETH", 0n, 0n)).toThrow(
+      /exceeds maxTxAmount/,
+    );
 
-    expect(() => engine.validate(target, parseEther("0.0005"), "ETH", 0n, 0n))
-      .not.toThrow();
+    expect(() => engine.validate(target, parseEther("0.0005"), "ETH", 0n, 0n)).not.toThrow();
   });
 
   it("should enforce daily spending limits", async () => {
@@ -33,12 +31,13 @@ describe("AgentPay Core Logic", () => {
     });
     await agent.init();
 
-    // @ts-ignore
+    // @ts-expect-error - testing private engine
     const engine = agent.policyEngine;
 
     // 0.008 spent + 0.005 attempt = 0.013 > 0.01
-    expect(() => engine.validate(target, parseEther("0.005"), "ETH", parseEther("0.008"), 0n))
-      .toThrow(/Daily limit/);
+    expect(() =>
+      engine.validate(target, parseEther("0.005"), "ETH", parseEther("0.008"), 0n),
+    ).toThrow(/Daily limit/);
   });
 
   it("should enforce allowlists", async () => {
@@ -48,32 +47,38 @@ describe("AgentPay Core Logic", () => {
     });
     await agent.init();
 
-    // @ts-ignore
+    // @ts-expect-error - testing private engine
     const engine = agent.policyEngine;
 
-    expect(() => engine.validate(target, parseEther("0.0001"), "ETH", 0n, 0n))
-      .not.toThrow();
+    expect(() => engine.validate(target, parseEther("0.0001"), "ETH", 0n, 0n)).not.toThrow();
 
-    expect(() => engine.validate("0x0000000000000000000000000000000000000000", parseEther("0.0001"), "ETH", 0n, 0n))
-      .toThrow(/not in the allowed list/);
+    expect(() =>
+      engine.validate(
+        "0x0000000000000000000000000000000000000000",
+        parseEther("0.0001"),
+        "ETH",
+        0n,
+        0n,
+      ),
+    ).toThrow(/not in the allowed list/);
   });
 
   it("should handle USDC decimals correctly", async () => {
     const agent = new AgentWallet({
-        privateKey,
-        policy: policy().maxTx(10).build(), // 10 USDC
+      privateKey,
+      policy: policy().maxTx(10).build(), // 10 USDC
     });
     await agent.init();
 
-    // @ts-ignore
+    // @ts-expect-error - testing private engine
     const engine = agent.policyEngine;
 
     // 11 USDC = 11,000,000 units
-    expect(() => engine.validate(target, BigInt(11_000_000), "USDC", 0n, 0n))
-        .toThrow(/exceeds maxTxAmount/);
+    expect(() => engine.validate(target, BigInt(11_000_000), "USDC", 0n, 0n)).toThrow(
+      /exceeds maxTxAmount/,
+    );
 
     // 5 USDC = 5,000,000 units
-    expect(() => engine.validate(target, BigInt(5_000_000), "USDC", 0n, 0n))
-        .not.toThrow();
+    expect(() => engine.validate(target, BigInt(5_000_000), "USDC", 0n, 0n)).not.toThrow();
   });
 });

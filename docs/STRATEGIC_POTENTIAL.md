@@ -4,7 +4,7 @@
 **Verdict: High Potential.**
 AgentPay is positioned at the intersection of two explosive trends: **Agentic AI** and **Programmable Money**. The market for agentic AI is growing at ~100% YoY, with billions in VC funding flowing into companies that turn "planning" into "action." Payments are the "last mile" of autonomy.
 
-However, in its **current state** (volatile memory, client-side only), it is a prototype. To become a billion-dollar startup, it must evolve into a **Financial Guardrail Protocol** for agents.
+However, in its **current state** (SDK-enforced policies with file-backed persistence by default), it is an early-stage developer tool. To become a billion-dollar startup, it must evolve into a **Financial Guardrail Protocol** for agents.
 
 ## 2. Competitive Landscape & Moat Analysis
 | Competitor | Approach | Moat | AgentPay's Opportunity |

@@ -14,8 +14,12 @@ We take the security of AgentPay seriously. If you believe you have found a secu
 Please do **not** report security vulnerabilities via public GitHub issues.
 
 ### Our Security Model
-AgentPay uses a multi-layered security model:
+
+AgentPay uses a layered security model:
+
+AgentPay enforces SDK-level spending policies before signing transactions. Smart-account integrations can be used as part of a stronger architecture, but this package does not guarantee on-chain policy enforcement for every configuration. Treat private keys and MCP payment access as sensitive production secrets.
+
 1. **Client-side Policies:** Enforced by the SDK before any transaction is signed.
-2. **On-chain Guardrails:** When using Smart Accounts (ERC-7579), policies are enforced by the blockchain, making them un-bypassable even if the agent's code is compromised.
-3. **BigInt Precision:** Prevents rounding exploits and overflow errors.
-4. **Persistent State:** Ensures spending limits cannot be reset by restarting the agent process.
+2. **Smart Account Support:** Smart-account integrations can add stronger controls when configured, but policy enforcement is not guaranteed on-chain for every setup.
+3. **BigInt Precision:** Uses integer base units internally for policy checks.
+4. **Persistent State:** File-backed state is used by default, with pluggable storage for production deployments.

@@ -51,9 +51,9 @@ Hello Anthropic Team!
 I'm submitting **AgentPay**, an MCP server that provides secure, policy-enforced crypto wallets for AI agents.
 
 **Key Features:**
-- **Institutional Security:** Uses Safe (ERC-7579) Smart Accounts.
+- **Non-custodial Wallets:** Agent-owned wallets with SDK-level policy checks.
 - **Native USDC:** Support for stablecoin payments on Base.
-- **Spending Policies:** Max-per-transaction and daily limits enforced in code and on-chain.
+- **Spending Policies:** Max-per-transaction and daily limits enforced by the SDK before signing.
 
 This server allows Claude users to instantly give their AI the ability to pay for its own compute, data, and APIs autonomously and safely.
 
