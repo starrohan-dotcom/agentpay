@@ -9,7 +9,7 @@ The demand for AgentPay is driven by a massive "Architectural Gap" in the AI eco
 ## 2. High-Conversion "Hooks"
 To get 10,000 downloads, we will use three specific psychological hooks for developers:
 - **Hook 1 (The "Magic" Trick):** *"Give your AI a bank account in 60 seconds with zero code."* (Focus on MCP/Claude).
-- **Hook 2 (The "Security" Peace of Mind):** *"Stop rogue agents from draining your wallet. Institutional policies built on Safe."*
+- **Hook 2 (The "Security" Peace of Mind):** *"Stop rogue agents from overspending. SDK policies check daily limits and recipient allowlists before signing."*
 - **Hook 3 (The "Future" Flex):** *"Don't just build a chatbot. Build a self-sustaining business agent that pays for its own compute."*
 
 ## 3. The 3-Day Tactical Timeline

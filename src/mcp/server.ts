@@ -2,6 +2,14 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { AgentWallet } from "../AgentWallet.js";
+import {
+  assertPaymentsEnabled,
+  assertRecipientAllowed,
+  getMcpTools,
+  getPaymentSafetyConfig,
+  parsePaymentArgs,
+  parseToken,
+} from "./safety.js";
 import "dotenv/config";
 
 /**
@@ -24,6 +32,7 @@ const wallet = new AgentWallet({
   useSmartAccount: process.env.USE_SMART_ACCOUNT === "true",
   bundlerUrl: process.env.BUNDLER_URL,
 });
+const paymentSafety = getPaymentSafetyConfig(process.env);
 
 const server = new Server(
   {
@@ -40,37 +49,7 @@ const server = new Server(
 // ── List available tools ──
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: [
-      {
-        name: "check_balance",
-        description: "Check the current wallet balance in ETH or USDC",
-        inputSchema: {
-          type: "object",
-          properties: {
-            token: { type: "string", enum: ["ETH", "USDC"], default: "ETH" },
-          },
-        },
-      },
-      {
-        name: "send_payment",
-        description: "Send a crypto payment to a specific address",
-        inputSchema: {
-          type: "object",
-          properties: {
-            to: { type: "string", description: "The recipient's wallet address" },
-            amount: { type: "number", description: "The amount to send" },
-            token: { type: "string", enum: ["ETH", "USDC"], default: "ETH" },
-            memo: { type: "string", description: "An optional label for the payment" },
-          },
-          required: ["to", "amount"],
-        },
-      },
-      {
-        name: "get_summary",
-        description: "Get a summary of the agent's total spending and limits",
-        inputSchema: { type: "object", properties: {} },
-      },
-    ],
+    tools: getMcpTools(paymentSafety),
   };
 });
 
@@ -83,7 +62,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "check_balance": {
-        const token = (args?.token as "ETH" | "USDC") || "ETH";
+        const token = parseToken(args?.token);
         const bal = await wallet.balance(token);
         return {
           content: [{ type: "text", text: `Current balance: ${bal} ${token}` }],
@@ -91,17 +70,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "send_payment": {
-        const to = args?.to as `0x${string}`;
-        const amount = args?.amount as number;
-        const token = (args?.token as "ETH" | "USDC") || "ETH";
-        const memo = args?.memo as string;
+        assertPaymentsEnabled(paymentSafety);
+        const payment = parsePaymentArgs(args);
+        assertRecipientAllowed(payment.to, paymentSafety);
 
-        const tx = await wallet.pay({ to, amount, token, memo });
+        const tx = await wallet.pay(payment);
         return {
           content: [
             {
               type: "text",
-              text: `✅ Payment sent! Amount: ${amount} ${token}, To: ${to}. Transaction Hash: ${tx.hash}`,
+              text: `Payment sent. Amount: ${payment.amount} ${payment.token ?? "ETH"}, To: ${payment.to}. Transaction Hash: ${tx.hash}`,
             },
           ],
         };

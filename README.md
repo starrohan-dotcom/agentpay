@@ -14,7 +14,7 @@ AI agents can think, but they can't pay. For an agent to be truly autonomous, it
 
 ## 📦 Features
 
-- 💳 **Institutional Security** — Built on Safe (ERC-7579) Smart Accounts.
+- 💳 **Non-Custodial Wallets** — Agent-owned wallets with optional smart-account support.
 - 🛡️ **Spending Policies** — Max per transaction, daily limits, and allowlists.
 - 📋 **Persistent History** — Every payment logged and preserved across agent restarts.
 - 📊 **Multi-Asset** — Native support for **ETH** and **USDC** on Base.
@@ -26,11 +26,13 @@ AI agents can think, but they can't pay. For an agent to be truly autonomous, it
 ## 🛠️ Quickstart
 
 ### 1. Initialize Project
+
 ```bash
 npx agentpay
 ```
 
 ### 2. Usage
+
 ```ts
 import "dotenv/config";
 import { AgentWallet, policy } from "@starrohan/agentpay";
@@ -38,7 +40,7 @@ import { AgentWallet, policy } from "@starrohan/agentpay";
 const agent = new AgentWallet({
   privateKey: process.env.AGENT_PRIVATE_KEY,
   agentId: "research-agent-01",
-  policy: policy().maxTx(0.001).dailyLimit(0.01).build()
+  policy: policy().maxTx(0.001).dailyLimit(0.01).build(),
 });
 
 await agent.init();
@@ -52,9 +54,11 @@ await agent.pay({ to: "0xRECIPIENT", amount: 0.00001, memo: "API request" });
 AgentPay is framework-agnostic. Give your favorite AI a wallet instantly.
 
 ### Claude Desktop / MCP
+
 Supports **Model Context Protocol (MCP)**. Give Claude a wallet with zero code. [See setup guide](#-mcp-setup-guide).
 
 ### Frameworks
+
 - 🦜 **LangChain:** Official `AgentPayTool` integration.
 - 🤝 **CrewAI:** Native tool generator for multi-agent teams.
 - 🤖 **AutoGen:** Standard function registration support.
@@ -98,15 +102,21 @@ Give your Claude Desktop AI a wallet in 60 seconds.
 ```
 
 ### Advanced Config
-| Env Var | Description |
-|---------|-------------|
-| `AGENT_PRIVATE_KEY` | Hex-encoded private key (starts with 0x) |
-| `RPC_URL` | Base or Base Sepolia RPC URL |
-| `USE_SMART_ACCOUNT` | Set to `true` to use Safe Smart Accounts |
-| `BUNDLER_URL` | ERC-4337 Bundler URL (Required if `USE_SMART_ACCOUNT` is true) |
-| `AGENT_ID` | Custom identifier for state persistence |
 
-3.  **Restart Claude.** You will now see a 💳 icon. Ask Claude: *"What is my wallet balance?"*
+| Env Var                       | Description                                                                       |
+| ----------------------------- | --------------------------------------------------------------------------------- |
+| `AGENT_PRIVATE_KEY`           | Hex-encoded private key (starts with 0x)                                          |
+| `RPC_URL`                     | Base or Base Sepolia RPC URL                                                      |
+| `USE_SMART_ACCOUNT`           | Set to `true` to use Safe Smart Accounts                                          |
+| `BUNDLER_URL`                 | ERC-4337 Bundler URL (Required if `USE_SMART_ACCOUNT` is true)                    |
+| `AGENT_ID`                    | Custom identifier for state persistence                                           |
+| `AGENTPAY_ENABLE_PAYMENTS`    | Set to `true` to expose and execute `send_payment`; omitted by default for safety |
+| `AGENTPAY_ALLOWED_RECIPIENTS` | Optional comma-separated address allowlist for MCP payments                       |
+| `AGENTPAY_MCP_AUTH_TOKEN`     | Optional bearer token required by hosted SSE MCP endpoints                        |
+
+By default, the MCP server exposes balance and summary tools only. To allow an AI client to send funds, set `AGENTPAY_ENABLE_PAYMENTS=true`. For hosted or shared environments, also set `AGENTPAY_ALLOWED_RECIPIENTS` to a comma-separated list of approved recipient addresses and protect SSE endpoints with `AGENTPAY_MCP_AUTH_TOKEN`.
+
+3.  **Restart Claude.** You will now see a 💳 icon. Ask Claude: _"What is my wallet balance?"_
 
 ---
 

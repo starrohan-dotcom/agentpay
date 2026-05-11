@@ -6,7 +6,7 @@ AgentPay addresses a critical bottleneck in the Agentic Web: the ability for AI 
 ## 2. Architecture Analysis
 - **Tech Stack:** Built on `viem` and TypeScript, leveraging Base Sepolia (L2). This is a modern, high-performance choice for Ethereum-based agents.
 - **Developer Experience (DX):** Excellent. The fluent `PolicyBuilder` and simple `AgentWallet` class make it extremely easy to integrate.
-- **State Management:** **Critical Weakness.** All transaction history and daily spend tracking are stored in-memory. This means restarting the agent process wipes all "enforcement" data, allowing an agent to exceed its daily limits immediately upon reboot.
+- **State Management:** **Improved, still production-sensitive.** The SDK now uses file-backed persistence by default and supports pluggable storage providers for daily spend tracking and transaction history. Production deployments should still use durable database, vault, and operational controls appropriate for financial workflows.
 
 ## 3. Security & Reliability
 - **Client-Side Enforcement:** Policies are enforced in the library code, not on-chain. While this saves gas and reduces complexity, it means a compromised agent or local environment can easily bypass all limits by calling `walletClient` directly.
@@ -14,7 +14,7 @@ AgentPay addresses a critical bottleneck in the Agentic Web: the ability for AI 
 - **Private Key Exposure:** The library requires the agent's private key to be passed in the config. Without a secure vault or Trusted Execution Environment (TEE) integration, this is a high-risk pattern for production agents.
 
 ## 4. Scalability
-- **Data Persistence:** Without a database or persistent storage, the transaction history is lost on every restart. This makes it unsuitable for long-term agent workflows or "set and forget" deployments.
+- **Data Persistence:** File-backed persistence is now the default for SDK state, and storage is pluggable. Production agent workflows should still use managed database or vault-backed storage where availability, access control, backups, and auditability are required.
 - **Chain Support:** Currently ETH/Base-centric. Expanding to USDC or other tokens will require significant refactoring of the internal math and transaction logic (handling decimals, allowances, etc.).
 
 ## 5. Roadmap Evaluation
@@ -23,11 +23,11 @@ AgentPay addresses a critical bottleneck in the Agentic Web: the ability for AI 
 - **USDC Support:** Essential for business use cases where volatility is a concern.
 
 ## 6. Recommendations
-1.  **Implement Persistence:** Add a storage interface (e.g., simple JSON file for PoC, Redis/SQL for production) to track `dailySpent` and `txHistory` across restarts.
+1.  **Harden Persistence:** Keep the storage interface, and use Redis/SQL/vault-backed storage in production to track `dailySpent` and `txHistory` across restarts with access controls and audits.
 2.  **Move to BigInt/Fixed-Point:** Replace `number` with `bigint` or a decimal library for all internal amount logic to prevent precision errors.
 3.  **Smart Contract Wallets:** Pivot the core architecture towards Smart Accounts (using tools like Permissionless.js or Alchemy's Account Kit). This allows policy enforcement (e.g., spending limits) to happen in a smart contract, providing real security.
 4.  **Environment Variable Safety:** At minimum, add better defaults for loading private keys and warning users about the risks of plaintext keys.
 
 ## 7. Conclusion
 **Is it a good startup?**
-The **idea** is excellent and the **market timing** is perfect. However, as a **technical foundation**, it is currently too brittle for production financial applications. If the team can pivot to smart-contract-based enforcement and fix the state persistence issues, AgentPay could become a vital piece of infrastructure for the AI economy.
+The **idea** is excellent and the **market timing** is perfect. However, as a **technical foundation**, it still needs production hardening for high-value financial applications. If the team continues toward smart-contract-based enforcement and production-grade storage/key management, AgentPay could become a vital piece of infrastructure for the AI economy.

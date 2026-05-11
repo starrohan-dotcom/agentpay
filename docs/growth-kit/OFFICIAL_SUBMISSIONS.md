@@ -49,12 +49,12 @@ const tool = new AgentPayTool(wallet)
 
 **Features:**
 → Autonomous USDC payments on Base L2
-→ Spending policy engine — agents can't overspend
-→ ERC-7579 Smart Account support
+→ Spending policy engine checks limits before signing
+→ Optional smart-account support
 → Full transaction history with memos
 → Works with LangChain, CrewAI, AutoGen
 
-The plugin is production ready, MIT licensed, and actively maintained.
+The plugin is ready for developer feedback, MIT licensed, and actively maintained.
 
 Would love to be listed in the official integrations documentation 🙏
 

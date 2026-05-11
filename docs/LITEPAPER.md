@@ -12,7 +12,7 @@ The next wave of AI isn't just about thinking; it's about **acting**. For an age
 AgentPay is built on three foundational pillars:
 
 ### A. Non-Custodial Security
-We leverage **Safe (ERC-7579)** Smart Accounts to ensure that even if the agent's code is compromised, the funds remain protected by on-chain policies.
+AgentPay keeps wallets non-custodial and enforces spending policies in the SDK before transactions are signed. Smart-account integrations can strengthen a deployment, but this package does not guarantee on-chain policy enforcement for every configuration.
 
 ### B. Fluent Policy Engine
 Our SDK provides a developer-friendly fluent API to set:

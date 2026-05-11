@@ -2,3 +2,6 @@ node_modules
 dist
 .env
 .agentpay-state-*.json
+.agents/
+.roo/
+skills-lock.json

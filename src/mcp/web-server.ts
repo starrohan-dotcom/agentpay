@@ -2,7 +2,15 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { AgentWallet } from "../AgentWallet.js";
-import express from "express";
+import {
+  assertPaymentsEnabled,
+  assertRecipientAllowed,
+  getMcpTools,
+  getPaymentSafetyConfig,
+  parsePaymentArgs,
+  parseToken,
+} from "./safety.js";
+import express, { type Request, type Response } from "express";
 import "dotenv/config";
 
 /**
@@ -28,96 +36,86 @@ const wallet = new AgentWallet({
   useSmartAccount: process.env.USE_SMART_ACCOUNT === "true",
   bundlerUrl: process.env.BUNDLER_URL,
 });
+const paymentSafety = getPaymentSafetyConfig(process.env);
+const mcpAuthToken = process.env.AGENTPAY_MCP_AUTH_TOKEN;
 
-const server = new Server(
-  {
-    name: "agentpay",
-    version: "1.4.0",
-  },
-  {
-    capabilities: {
-      tools: {},
+function isAuthorized(req: Request): boolean {
+  if (!mcpAuthToken) {
+    return true;
+  }
+
+  const authHeader = req.header("authorization");
+  return authHeader === `Bearer ${mcpAuthToken}`;
+}
+
+function requireMcpAuth(req: Request, res: Response): boolean {
+  if (isAuthorized(req)) {
+    return true;
+  }
+
+  res.status(401).json({ error: "Unauthorized" });
+  return false;
+}
+
+function createMcpServer(): Server {
+  const server = new Server(
+    {
+      name: "agentpay",
+      version: "1.4.0",
     },
-  },
-);
-
-// ── List available tools ──
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: "check_balance",
-        description: "Check the current wallet balance in ETH or USDC",
-        inputSchema: {
-          type: "object",
-          properties: {
-            token: { type: "string", enum: ["ETH", "USDC"], default: "ETH" },
-          },
-        },
+    {
+      capabilities: {
+        tools: {},
       },
-      {
-        name: "send_payment",
-        description: "Send a crypto payment to a specific address",
-        inputSchema: {
-          type: "object",
-          properties: {
-            to: { type: "string", description: "The recipient's wallet address" },
-            amount: { type: "number", description: "The amount to send" },
-            token: { type: "string", enum: ["ETH", "USDC"], default: "ETH" },
-            memo: { type: "string", description: "An optional label for the payment" },
-          },
-          required: ["to", "amount"],
-        },
-      },
-      {
-        name: "get_summary",
-        description: "Get a summary of the agent's total spending and limits",
-        inputSchema: { type: "object", properties: {} },
-      },
-    ],
-  };
-});
+    },
+  );
 
-// ── Handle tool calls ──
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  await wallet.init();
+  // ── List available tools ──
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return {
+      tools: getMcpTools(paymentSafety),
+    };
+  });
 
-  const { name, arguments: args } = request.params;
+  // ── Handle tool calls ──
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    await wallet.init();
 
-  try {
-    switch (name) {
-      case "check_balance": {
-        const token = (args?.token as "ETH" | "USDC") || "ETH";
-        const bal = await wallet.balance(token);
-        return {
-          content: [{ type: "text", text: `Current balance: ${bal} ${token}` }],
-        };
-      }
+    const { name, arguments: args } = request.params;
 
-      case "send_payment": {
-        const to = args?.to as `0x${string}`;
-        const amount = args?.amount as number;
-        const token = (args?.token as "ETH" | "USDC") || "ETH";
-        const memo = args?.memo as string;
+    try {
+      switch (name) {
+        case "check_balance": {
+          const token = parseToken(args?.token);
+          const bal = await wallet.balance(token);
+          return {
+            content: [{ type: "text", text: `Current balance: ${bal} ${token}` }],
+          };
+        }
 
-        const tx = await wallet.pay({ to, amount, token, memo });
-        return {
-          content: [
-            {
-              type: "text",
-              text: `✅ Payment sent! Amount: ${amount} ${token}, To: ${to}. Transaction Hash: ${tx.hash}`,
-            },
-          ],
-        };
-      }
+        case "send_payment": {
+          assertPaymentsEnabled(paymentSafety);
+          const payment = parsePaymentArgs(args);
+          assertRecipientAllowed(payment.to, paymentSafety);
 
-      case "get_summary": {
-        const balETH = await wallet.balance("ETH");
-        const balUSDC = await wallet.balance("USDC");
-        const spentETH = wallet.dailySpentSoFar("ETH");
-        const spentUSDC = wallet.dailySpentSoFar("USDC");
+          const tx = await wallet.pay(payment);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Payment sent. Amount: ${payment.amount} ${payment.token ?? "ETH"}, To: ${payment.to}. Transaction Hash: ${tx.hash}`,
+              },
+            ],
+          };
+        }
 
-        const summaryText = `
+        case "get_summary": {
+          const balETH = await wallet.balance("ETH");
+          const balUSDC = await wallet.balance("USDC");
+          const spentETH = wallet.dailySpentSoFar("ETH");
+          const spentUSDC = wallet.dailySpentSoFar("USDC");
+
+          const summaryText = `
 AgentPay Summary [${wallet.agentId}]
 ────────────────────────────────
 Address: ${wallet.address}
@@ -125,39 +123,64 @@ Balances: ${balETH} ETH | ${balUSDC} USDC
 Spent Today: ${spentETH} ETH | ${spentUSDC} USDC
         `.trim();
 
-        return {
-          content: [{ type: "text", text: summaryText }],
-        };
+          return {
+            content: [{ type: "text", text: summaryText }],
+          };
+        }
+
+        default:
+          throw new Error(`Unknown tool: ${name}`);
       }
-
-      default:
-        throw new Error(`Unknown tool: ${name}`);
+    } catch (err: any) {
+      return {
+        content: [{ type: "text", text: `[AgentPay Error] ${err.message}` }],
+        isError: true,
+      };
     }
-  } catch (err: any) {
-    return {
-      content: [{ type: "text", text: `[AgentPay Error] ${err.message}` }],
-      isError: true,
-    };
-  }
-});
+  });
 
-let transport: SSEServerTransport | null = null;
+  return server;
+}
+
+const transports = new Map<string, SSEServerTransport>();
 
 app.get("/", (req, res) => {
   res.status(200).send("AgentPay Cloud MCP Server is running.");
 });
 
 app.get("/sse", async (req, res) => {
+  if (!requireMcpAuth(req, res)) {
+    return;
+  }
+
   console.log("New SSE connection");
-  transport = new SSEServerTransport("/message", res);
-  await server.connect(transport);
+  const transport = new SSEServerTransport("/message", res);
+  transports.set(transport.sessionId, transport);
+  transport.onclose = () => {
+    transports.delete(transport.sessionId);
+  };
+  await createMcpServer().connect(transport);
 });
 
 app.post("/message", async (req, res) => {
-  console.log("New message received");
-  if (transport) {
-    await transport.handlePostMessage(req, res);
+  if (!requireMcpAuth(req, res)) {
+    return;
   }
+
+  const sessionId = req.query.sessionId;
+  if (typeof sessionId !== "string") {
+    res.status(400).json({ error: "Missing sessionId" });
+    return;
+  }
+
+  const transport = transports.get(sessionId);
+  if (!transport) {
+    res.status(404).json({ error: "Unknown sessionId" });
+    return;
+  }
+
+  console.log("New message received");
+  await transport.handlePostMessage(req, res);
 });
 
 app.listen(port, () => {
