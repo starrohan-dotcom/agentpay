@@ -45,9 +45,21 @@ export {
     type QueuedTransaction,
     type AuditLogEntry,
     type HealthStatus,
+    type ApiErrorResponse,
+    type SecretsProvider,
+    type Tracer,
+    type TraceSpan,
+    type DeadLetterEntry,
+    type DeadLetterQueue,
     DEFAULT_RETRY_CONFIG,
     DEFAULT_CIRCUIT_BREAKER_CONFIG,
 } from "./utils/types.js";
+
+// ── v1.6.0: Production-Grade Additions ──
+export { AgentPayError, ErrorCode } from "./utils/errors.js";
+export { getTracer, setTracer, initTracing, withSpan } from "./utils/tracing.js";
+export { InMemoryDeadLetterQueue, deadLetterQueue } from "./utils/dead-letter-queue.js";
+export { EnvSecretsProvider, createSecretsProvider } from "./utils/secrets.js";
 
 // ── MCP ──
 export { McpToolHandler } from "./mcp/handler.js";

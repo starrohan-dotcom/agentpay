@@ -2,6 +2,13 @@ import { type StorageProvider, type AgentState } from "./StorageProvider.js";
 import { logger } from "../utils/logger.js";
 
 /**
+ * PostgreSQL client/pool interface - use `pg` package types in production.
+ */
+interface PgPool {
+    query(text: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+}
+
+/**
  * PostgreSQL-backed storage provider for enterprise deployments.
  *
  * Provides:
@@ -16,11 +23,11 @@ import { logger } from "../utils/logger.js";
  *   const storage = new PostgresStorage(pool);
  */
 export class PostgresStorage implements StorageProvider {
-    private pool: any; // pg Pool type - use `pg` package types in production
+    private pool: PgPool;
     private tableName: string;
 
     constructor(
-        pool: any,
+        pool: PgPool,
         options: { tableName?: string } = {},
     ) {
         this.pool = pool;
@@ -117,7 +124,7 @@ export class PostgresStorage implements StorageProvider {
             const result = await this.pool.query(
                 `SELECT agent_id FROM ${this.tableName} ORDER BY updated_at DESC`,
             );
-            return result.rows.map((row: any) => row.agent_id);
+            return result.rows.map((row: Record<string, unknown>) => row.agent_id as string);
         } catch (err) {
             logger.error("PostgresStorage: Failed to list agents", {
                 error: String(err),
@@ -134,7 +141,7 @@ export class PostgresStorage implements StorageProvider {
             const result = await this.pool.query(
                 `SELECT COUNT(*) as count FROM ${this.tableName}`,
             );
-            return parseInt(result.rows[0].count, 10);
+            return parseInt(result.rows[0].count as string, 10);
         } catch {
             return 0;
         }

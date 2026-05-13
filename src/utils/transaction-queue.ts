@@ -3,6 +3,7 @@ import { type Address, type Hash } from "viem";
 import { type QueuedTransaction } from "./types.js";
 import { logger } from "./logger.js";
 import { pendingTransactions } from "./metrics.js";
+import { deadLetterQueue } from "./dead-letter-queue.js";
 
 /**
  * Production-grade transaction queue with idempotency guarantees.
@@ -12,12 +13,18 @@ import { pendingTransactions } from "./metrics.js";
  * - Ordered processing (FIFO)
  * - Status tracking for each transaction
  * - Graceful shutdown with in-flight completion
+ * - Dead letter queue for permanently failed transactions (v1.6.0)
  */
 export class TransactionQueue {
     private queue: QueuedTransaction[] = [];
     private processing: Set<string> = new Set();
     private completed: Map<string, QueuedTransaction> = new Map();
     private isShuttingDown: boolean = false;
+    private readonly maxRetries: number;
+
+    constructor(maxRetries: number = 3) {
+        this.maxRetries = maxRetries;
+    }
 
     /**
      * Enqueues a transaction for processing.
@@ -101,9 +108,9 @@ export class TransactionQueue {
     }
 
     /**
-     * Marks a transaction as failed (will be retried).
+     * Marks a transaction as failed (will be retried or sent to dead letter queue).
      */
-    markFailed(id: string, error: string): void {
+    async markFailed(id: string, error: string): Promise<void> {
         const tx = this.findInQueue(id);
         if (!tx) return;
 
@@ -113,7 +120,7 @@ export class TransactionQueue {
         this.processing.delete(id);
 
         // Re-queue for retry if under max retries
-        if (tx.retryCount < 3) {
+        if (tx.retryCount < this.maxRetries) {
             tx.status = "pending";
             logger.warn("Transaction failed, will retry", {
                 txId: id,
@@ -121,7 +128,19 @@ export class TransactionQueue {
                 error,
             });
         } else {
-            logger.error("Transaction failed permanently after max retries", {
+            // Move to dead letter queue
+            tx.status = "dead_letter";
+            tx.deadLetterReason = error;
+            tx.deadLetteredAt = new Date();
+
+            await deadLetterQueue.push({
+                transaction: tx,
+                failedAt: new Date(),
+                reason: error,
+                retriesExhausted: tx.retryCount,
+            });
+
+            logger.error("Transaction moved to dead letter queue after max retries", {
                 txId: id,
                 retryCount: tx.retryCount,
                 error,
@@ -164,6 +183,13 @@ export class TransactionQueue {
     }
 
     /**
+     * Returns all dead letter transactions.
+     */
+    getDeadLetters(): QueuedTransaction[] {
+        return this.queue.filter((t) => t.status === "dead_letter");
+    }
+
+    /**
      * Returns queue statistics.
      */
     getStats(): {
@@ -171,18 +197,21 @@ export class TransactionQueue {
         processing: number;
         completed: number;
         failed: number;
+        deadLetter: number;
         total: number;
     } {
         const pending = this.queue.filter((t) => t.status === "pending").length;
         const processing = this.processing.size;
         const completed = this.completed.size;
-        const failed = this.queue.filter((t) => t.status === "failed" && t.retryCount >= 3).length;
+        const failed = this.queue.filter((t) => t.status === "failed" && t.retryCount < this.maxRetries).length;
+        const deadLetter = this.queue.filter((t) => t.status === "dead_letter").length;
 
         return {
             pending,
             processing,
             completed,
             failed,
+            deadLetter,
             total: this.queue.length + this.completed.size,
         };
     }

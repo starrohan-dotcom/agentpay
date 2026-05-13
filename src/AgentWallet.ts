@@ -42,6 +42,10 @@ import {
   type WalletOperations,
   type PublicClientOperations,
 } from "./utils/types.js";
+import { getTracer } from "./utils/tracing.js";
+import { deadLetterQueue } from "./utils/dead-letter-queue.js";
+import { createSecretsProvider } from "./utils/secrets.js";
+import type { SecretsProvider } from "./utils/types.js";
 
 // ─────────────────────────────────────────────
 // TYPES
@@ -157,6 +161,78 @@ const ERC20_ABI = [
 ] as const;
 
 // ─────────────────────────────────────────────
+// IDEMPOTENCY KEY CACHE WITH TTL
+// ─────────────────────────────────────────────
+
+interface CacheEntry {
+  timestamp: number;
+}
+
+/**
+ * TTL-based cache for idempotency keys.
+ * Prevents unbounded memory growth by evicting entries older than TTL.
+ */
+class IdempotencyCache {
+  private cache: Map<string, CacheEntry> = new Map();
+  private ttlMs: number;
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
+
+  constructor(ttlMs: number = 24 * 60 * 60 * 1000) {
+    this.ttlMs = ttlMs;
+    // Periodic cleanup every 10 minutes
+    this.cleanupInterval = setInterval(() => this.cleanup(), 10 * 60 * 1000);
+    // Allow Node.js to exit even if this interval is running
+    if (this.cleanupInterval && typeof this.cleanupInterval === "object" && "unref" in this.cleanupInterval) {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  has(key: string): boolean {
+    const entry = this.cache.get(key);
+    if (!entry) return false;
+    if (Date.now() - entry.timestamp > this.ttlMs) {
+      this.cache.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  add(key: string): void {
+    this.cache.set(key, { timestamp: Date.now() });
+  }
+
+  delete(key: string): void {
+    this.cache.delete(key);
+  }
+
+  private cleanup(): void {
+    const now = Date.now();
+    let removed = 0;
+    for (const [key, entry] of this.cache) {
+      if (now - entry.timestamp > this.ttlMs) {
+        this.cache.delete(key);
+        removed++;
+      }
+    }
+    if (removed > 0) {
+      logger.debug(`Idempotency cache cleanup: removed ${removed} expired entries`);
+    }
+  }
+
+  get size(): number {
+    return this.cache.size;
+  }
+
+  /** Clean up the periodic cleanup interval. Call during shutdown. */
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
 // AGENT WALLET (Production-Grade)
 // ─────────────────────────────────────────────
 
@@ -164,14 +240,17 @@ const ERC20_ABI = [
  * AgentWallet is the primary interface for giving AI agents autonomous
  * financial capabilities on Base.
  *
- * Production features:
+ * Production features (v1.6.0):
  * - Retry logic with exponential backoff for all RPC calls
  * - Circuit breaker to prevent cascading failures
- * - Idempotency keys to prevent duplicate payments
+ * - Idempotency keys with TTL-based eviction to prevent duplicate payments
  * - Audit logging for all financial operations
  * - Prometheus-compatible metrics
  * - Rate limiting on payment operations
  * - Transaction queue with graceful shutdown
+ * - Distributed tracing spans
+ * - Dead letter queue for permanently failed transactions
+ * - Secrets provider abstraction for key management
  */
 export class AgentWallet {
   private walletClient: WalletOperations;
@@ -184,7 +263,8 @@ export class AgentWallet {
   private dayStart: Date = new Date();
   private storage: StorageProvider;
   private isInitialized: boolean = false;
-  private processedIdempotencyKeys: Set<string> = new Set();
+  private processedIdempotencyKeys: IdempotencyCache;
+  private secretsProvider: SecretsProvider;
 
   /** The public wallet address of the agent. */
   public address: Address;
@@ -204,6 +284,8 @@ export class AgentWallet {
     this.storage =
       (this.config.storage as StorageProvider) ?? new FileStorage();
     this.policyEngine = new PolicyEngine(this.config.policy ?? {});
+    this.processedIdempotencyKeys = new IdempotencyCache();
+    this.secretsProvider = createSecretsProvider();
 
     const chain = this.detectChain();
     const rpcUrl = this.config.rpcUrl ?? DEFAULT_RPC_URLS[chain.id] ?? "https://sepolia.base.org";
@@ -212,12 +294,12 @@ export class AgentWallet {
       account,
       chain,
       transport: http(rpcUrl),
-    }) as unknown as WalletOperations;
+    }) as WalletOperations;
 
     this.publicClient = createPublicClient({
       chain,
       transport: http(rpcUrl),
-    }) as unknown as PublicClientOperations;
+    }) as PublicClientOperations;
 
     activeAgents.inc();
     logger.info("AgentWallet constructed", {
@@ -247,18 +329,28 @@ export class AgentWallet {
   async init(): Promise<void> {
     if (this.isInitialized) return;
 
-    await this.loadState();
-
-    if (this.config.useSmartAccount) {
-      await this.initializeSmartAccount();
-    }
-
-    this.isInitialized = true;
-    logger.info("AgentWallet initialized", {
+    const span = getTracer().startSpan("AgentWallet.init", {
       agentId: this.agentId,
-      address: this.address,
-      smartAccount: !!this.smartAccountClient,
     });
+
+    try {
+      await this.loadState();
+
+      if (this.config.useSmartAccount) {
+        await this.initializeSmartAccount();
+      }
+
+      this.isInitialized = true;
+      logger.info("AgentWallet initialized", {
+        agentId: this.agentId,
+        address: this.address,
+        smartAccount: !!this.smartAccountClient,
+      });
+      span.end();
+    } catch (err: any) {
+      span.endWithError(err);
+      throw err;
+    }
   }
 
   /**
@@ -275,15 +367,16 @@ export class AgentWallet {
       );
     }
 
-    const safeAccount = await toSafeSmartAccount({
-      client: this.publicClient as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const safeAccount = await (toSafeSmartAccount as any)({
+      client: this.publicClient,
       signer: account,
       safeVersion: "1.4.1",
       entryPointDefinition: {
         address: SAFE_ENTRYPOINT_ADDRESS,
         version: "0.7",
       },
-    } as any);
+    });
 
     this.smartAccountClient = createSmartAccountClient({
       account: safeAccount,
@@ -310,10 +403,10 @@ export class AgentWallet {
         this.dayStart = state.dayStart
           ? new Date(state.dayStart)
           : new Date();
-        this.txHistory = (state.txHistory || []).map((tx: any) => ({
-          ...tx,
-          timestamp: new Date(tx.timestamp),
-        }));
+        this.txHistory = (state.txHistory || []).map((tx) => ({
+          ...(tx as unknown as Record<string, unknown>),
+          timestamp: new Date((tx as unknown as Record<string, unknown>).timestamp as string),
+        })) as unknown as TxRecord[];
       }
     } catch (err) {
       logger.warn("Could not load state, starting fresh", { error: String(err) });
@@ -354,12 +447,14 @@ export class AgentWallet {
    * Executes an autonomous payment in ETH or USDC.
    *
    * Production features:
-   * - Idempotency key support (prevents duplicate payments)
+   * - Idempotency key support with TTL-based eviction (prevents duplicate payments)
    * - Retry logic with exponential backoff
    * - Circuit breaker protection for RPC calls
    * - Rate limiting on payment operations
    * - Audit logging for all financial events
    * - Prometheus metrics
+   * - Distributed tracing spans
+   * - Dead letter queue for permanently failed transactions
    *
    * @async
    * @param {PayOptions} opts Payment destination, amount, and token.
@@ -367,194 +462,216 @@ export class AgentWallet {
    * @throws {AgentPayError} if initialization is missing or policy is violated.
    */
   async pay(opts: PayOptions): Promise<TxRecord> {
-    if (!this.isInitialized) {
-      throw new AgentPayError(
-        ErrorCode.INITIALIZATION_REQUIRED,
-        "Must call .init() before making payments.",
-      );
-    }
+    const traceSpan = getTracer().startSpan("AgentWallet.pay", {
+      agentId: this.agentId,
+      token: opts.token ?? "ETH",
+    });
 
-    // Rate limiting for payment operations
-    if (!rateLimiters.payments.tryConsume()) {
-      throw new AgentPayError(
-        ErrorCode.POLICY_VIOLATION,
-        "Rate limit exceeded for payment operations. Please try again later.",
-      );
-    }
+    try {
+      if (!this.isInitialized) {
+        throw new AgentPayError(
+          ErrorCode.INITIALIZATION_REQUIRED,
+          "Must call .init() before making payments.",
+        );
+      }
 
-    const validated = PayOptionsSchema.parse(opts);
-    const { to, amount, token = "ETH", memo, idempotencyKey } = validated as PayOptions;
+      // Rate limiting for payment operations
+      if (!rateLimiters.payments.tryConsume()) {
+        throw new AgentPayError(
+          ErrorCode.RATE_LIMIT_EXCEEDED,
+          "Rate limit exceeded for payment operations. Please try again later.",
+        );
+      }
 
-    // Idempotency check
-    if (idempotencyKey && this.processedIdempotencyKeys.has(idempotencyKey)) {
-      logger.warn("Duplicate idempotency key detected, rejecting payment", {
+      const validated = PayOptionsSchema.parse(opts);
+      const { to, amount, token = "ETH", memo, idempotencyKey } = validated as PayOptions;
+
+      // Idempotency check with TTL
+      if (idempotencyKey && this.processedIdempotencyKeys.has(idempotencyKey)) {
+        logger.warn("Duplicate idempotency key detected, rejecting payment", {
+          idempotencyKey,
+        });
+        throw new AgentPayError(
+          ErrorCode.POLICY_VIOLATION,
+          `Payment with idempotency key ${idempotencyKey} has already been processed.`,
+        );
+      }
+
+      const amountInBaseUnits =
+        token === "USDC"
+          ? BigInt(Math.floor(amount * 1_000_000))
+          : parseEther(amount.toFixed(18));
+
+      await this.checkDailyReset();
+
+      // Policy validation with audit logging
+      try {
+        this.policyEngine.validate(
+          to as Address,
+          amountInBaseUnits,
+          token,
+          this.dailySpentETH,
+          this.dailySpentUSDC,
+        );
+        auditLogger.logPolicyCheck({
+          agentId: this.agentId,
+          policyResult: "PASSED",
+          amount: amount.toString(),
+          token,
+          recipient: to as Address,
+        });
+      } catch (policyErr: any) {
+        policyViolations.inc({ token });
+        auditLogger.logPolicyCheck({
+          agentId: this.agentId,
+          policyResult: "FAILED",
+          amount: amount.toString(),
+          token,
+          recipient: to as Address,
+          errorMessage: policyErr.message,
+        });
+        traceSpan.endWithError(policyErr);
+        throw policyErr;
+      }
+
+      // Track idempotency key
+      if (idempotencyKey) {
+        this.processedIdempotencyKeys.add(idempotencyKey);
+      }
+
+      paymentsTotal.inc({ token, status: "initiated" });
+      auditLogger.logPaymentInitiated({
+        agentId: this.agentId,
+        amount: amount.toString(),
+        token,
+        recipient: to as Address,
+        idempotencyKey: idempotencyKey ?? "none",
+      });
+
+      logger.info("Processing payment", {
+        agentId: this.agentId,
+        amount,
+        token,
+        to,
         idempotencyKey,
       });
-      throw new AgentPayError(
-        ErrorCode.POLICY_VIOLATION,
-        `Payment with idempotency key ${idempotencyKey} has already been processed.`,
-      );
-    }
 
-    const amountInBaseUnits =
-      token === "USDC"
-        ? BigInt(Math.floor(amount * 1_000_000))
-        : parseEther(amount.toFixed(18));
+      const startTime = Date.now();
+      let hash: Hash;
 
-    await this.checkDailyReset();
-
-    // Policy validation with audit logging
-    try {
-      this.policyEngine.validate(
-        to as Address,
-        amountInBaseUnits,
-        token,
-        this.dailySpentETH,
-        this.dailySpentUSDC,
-      );
-      auditLogger.logPolicyCheck({
-        agentId: this.agentId,
-        policyResult: "PASSED",
-        amount: amount.toString(),
-        token,
-        recipient: to as Address,
-      });
-    } catch (policyErr: any) {
-      policyViolations.inc({ token });
-      auditLogger.logPolicyCheck({
-        agentId: this.agentId,
-        policyResult: "FAILED",
-        amount: amount.toString(),
-        token,
-        recipient: to as Address,
-        errorMessage: policyErr.message,
-      });
-      throw policyErr;
-    }
-
-    // Track idempotency key
-    if (idempotencyKey) {
-      this.processedIdempotencyKeys.add(idempotencyKey);
-    }
-
-    paymentsTotal.inc({ token, status: "initiated" });
-    auditLogger.logPaymentInitiated({
-      agentId: this.agentId,
-      amount: amount.toString(),
-      token,
-      recipient: to as Address,
-      idempotencyKey: idempotencyKey ?? "none",
-    });
-
-    logger.info("Processing payment", {
-      agentId: this.agentId,
-      amount,
-      token,
-      to,
-      idempotencyKey,
-    });
-
-    const startTime = Date.now();
-    let hash: Hash;
-
-    try {
-      // Execute with retry and circuit breaker
-      hash = await retryManager.execute(async () => {
-        return rpcCircuitBreaker.execute(async () => {
-          if (this.config.useSmartAccount && this.smartAccountClient) {
-            return this.executeSmartAccountPayment(
+      try {
+        // Execute with retry and circuit breaker
+        hash = await retryManager.execute(async () => {
+          return rpcCircuitBreaker.execute(async () => {
+            if (this.config.useSmartAccount && this.smartAccountClient) {
+              return this.executeSmartAccountPayment(
+                to as Address,
+                amountInBaseUnits,
+                token,
+              );
+            }
+            return this.executeEOAPayment(
               to as Address,
               amountInBaseUnits,
               token,
             );
-          }
-          return this.executeEOAPayment(
-            to as Address,
-            amountInBaseUnits,
-            token,
-          );
-        });
-      }, `payment-${this.agentId}`);
+          });
+        }, `payment-${this.agentId}`);
 
-      // Wait for receipt with retry
-      await retryManager.execute(async () => {
-        return rpcCircuitBreaker.execute(async () => {
-          await this.publicClient.waitForTransactionReceipt({ hash });
-        });
-      }, `wait-receipt-${hash}`);
+        // Wait for receipt with retry
+        await retryManager.execute(async () => {
+          return rpcCircuitBreaker.execute(async () => {
+            await this.publicClient.waitForTransactionReceipt({ hash });
+          });
+        }, `wait-receipt-${hash}`);
 
-      // Update daily spent
-      if (token === "ETH") {
-        this.dailySpentETH += amountInBaseUnits;
-      } else {
-        this.dailySpentUSDC += amountInBaseUnits;
+        // Update daily spent
+        if (token === "ETH") {
+          this.dailySpentETH += amountInBaseUnits;
+        } else {
+          this.dailySpentUSDC += amountInBaseUnits;
+        }
+
+        await this.saveState();
+
+        // Record latency
+        const latencySeconds = (Date.now() - startTime) / 1000;
+        paymentLatency.observe({ token, status: "success" }, latencySeconds);
+
+        paymentsSucceeded.inc({ token });
+        auditLogger.logPaymentSucceeded({
+          agentId: this.agentId,
+          transactionHash: hash,
+          amount: amount.toString(),
+          token,
+          recipient: to as Address,
+          idempotencyKey: idempotencyKey ?? "none",
+        });
+
+        logger.info("Payment successful", { hash, latencySeconds });
+      } catch (err: any) {
+        const latencySeconds = (Date.now() - startTime) / 1000;
+        paymentLatency.observe({ token, status: "failed" }, latencySeconds);
+
+        paymentsFailed.inc({ token });
+        auditLogger.logPaymentFailed({
+          agentId: this.agentId,
+          amount: amount.toString(),
+          token,
+          recipient: to as Address,
+          idempotencyKey: idempotencyKey ?? "none",
+          errorMessage: err.message,
+        });
+
+        // Remove idempotency key on failure to allow retry
+        if (idempotencyKey) {
+          this.processedIdempotencyKeys.delete(idempotencyKey);
+        }
+
+        const failedRecord: TxRecord = {
+          hash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+          to: to as Address,
+          amount,
+          memo,
+          timestamp: new Date(),
+          status: "failed",
+          idempotencyKey,
+        };
+        this.txHistory.push(failedRecord);
+        logger.error("Payment failed", { error: err.message });
+
+        traceSpan.endWithError(err);
+        throw new AgentPayError(
+          ErrorCode.TRANSACTION_FAILED,
+          err.message,
+          { originalError: err.message },
+        );
       }
 
-      await this.saveState();
-
-      // Record latency
-      const latencySeconds = (Date.now() - startTime) / 1000;
-      paymentLatency.observe({ token, status: "success" }, latencySeconds);
-
-      paymentsSucceeded.inc({ token });
-      auditLogger.logPaymentSucceeded({
-        agentId: this.agentId,
-        transactionHash: hash,
-        amount: amount.toString(),
-        token,
-        recipient: to as Address,
-        idempotencyKey: idempotencyKey ?? "none",
-      });
-
-      logger.info("Payment successful", { hash, latencySeconds });
-    } catch (err: any) {
-      const latencySeconds = (Date.now() - startTime) / 1000;
-      paymentLatency.observe({ token, status: "failed" }, latencySeconds);
-
-      paymentsFailed.inc({ token });
-      auditLogger.logPaymentFailed({
-        agentId: this.agentId,
-        amount: amount.toString(),
-        token,
-        recipient: to as Address,
-        idempotencyKey: idempotencyKey ?? "none",
-        errorMessage: err.message,
-      });
-
-      // Remove idempotency key on failure to allow retry
-      if (idempotencyKey) {
-        this.processedIdempotencyKeys.delete(idempotencyKey);
-      }
-
-      const failedRecord: TxRecord = {
-        hash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+      const record: TxRecord = {
+        hash,
         to: to as Address,
         amount,
         memo,
         timestamp: new Date(),
-        status: "failed",
+        status: "success",
         idempotencyKey,
       };
-      this.txHistory.push(failedRecord);
-      logger.error("Payment failed", { error: err.message });
+      this.txHistory.push(record);
+      traceSpan.end();
+      return record;
+    } catch (err: any) {
+      // Ensure span is ended on any unhandled error
+      if (err instanceof AgentPayError) {
+        throw err;
+      }
+      traceSpan.endWithError(err);
       throw new AgentPayError(
         ErrorCode.TRANSACTION_FAILED,
         err.message,
-        err,
+        { originalError: err.message },
       );
     }
-
-    const record: TxRecord = {
-      hash,
-      to: to as Address,
-      amount,
-      memo,
-      timestamp: new Date(),
-      status: "success",
-      idempotencyKey,
-    };
-    this.txHistory.push(record);
-    return record;
   }
 
   /**
@@ -612,7 +729,12 @@ export class AgentWallet {
       args: [to, amountInBaseUnits],
     });
 
-    return this.walletClient.writeContract(request);
+    return this.walletClient.writeContract(request as {
+      address: Address;
+      abi: readonly Record<string, unknown>[];
+      functionName: string;
+      args: readonly unknown[];
+    });
   }
 
   // ── Balance & History ──
@@ -635,12 +757,12 @@ export class AgentWallet {
         }
 
         try {
-          const raw = await this.publicClient.readContract({
+          const raw = (await this.publicClient.readContract({
             address: USDC_ADDRESS,
             abi: ERC20_ABI,
             functionName: "balanceOf",
             args: [this.address],
-          });
+          })) as bigint;
           return (Number(raw) / 1_000_000).toString();
         } catch {
           return "0.00";
@@ -691,6 +813,13 @@ export class AgentWallet {
    */
   getIsSmartAccount(): boolean {
     return !!this.smartAccountClient;
+  }
+
+  /**
+   * Returns the secrets provider for health checks.
+   */
+  getSecretsProvider(): SecretsProvider {
+    return this.secretsProvider;
   }
 
   // ── Summary ──

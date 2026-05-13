@@ -1,6 +1,6 @@
 {
   "name": "@starrohan/agentpay",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "mcpName": "io.github.starrohan-dotcom/agentpay",
   "description": "Autonomous agent wallets with built-in spending policies for Ethereum",
   "main": "./dist/index.js",

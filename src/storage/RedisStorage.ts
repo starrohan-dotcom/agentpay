@@ -2,6 +2,16 @@ import { type StorageProvider, type AgentState } from "./StorageProvider.js";
 import { logger } from "../utils/logger.js";
 
 /**
+ * Redis client interface - use `redis` package types in production.
+ */
+interface RedisClient {
+    get(key: string): Promise<string | null>;
+    set(key: string, value: string, options?: { EX: number }): Promise<unknown>;
+    del(key: string): Promise<unknown>;
+    exists(key: string): Promise<number>;
+}
+
+/**
  * Redis-backed storage provider for production deployments.
  *
  * Requires a Redis client instance. Supports:
@@ -17,12 +27,12 @@ import { logger } from "../utils/logger.js";
  *   const storage = new RedisStorage(redis);
  */
 export class RedisStorage implements StorageProvider {
-    private redis: any; // Redis client type - use `redis` package types in production
+    private redis: RedisClient;
     private keyPrefix: string;
     private ttlSeconds: number;
 
     constructor(
-        redisClient: any,
+        redisClient: RedisClient,
         options: { keyPrefix?: string; ttlSeconds?: number } = {},
     ) {
         this.redis = redisClient;

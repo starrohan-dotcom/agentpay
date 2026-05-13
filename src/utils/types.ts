@@ -2,7 +2,6 @@ import { type Address, type Hash } from "viem";
 
 /**
  * Strongly-typed smart account client interface.
- * Replaces the `any` type previously used for smartAccountClient.
  */
 export interface SmartAccountClient {
     address: Address;
@@ -25,9 +24,9 @@ export interface WalletOperations {
     }): Promise<Hash>;
     writeContract(args: {
         address: Address;
-        abi: readonly any[];
+        abi: readonly Record<string, unknown>[];
         functionName: string;
-        args: readonly any[];
+        args: readonly unknown[];
     }): Promise<Hash>;
 }
 
@@ -38,18 +37,18 @@ export interface PublicClientOperations {
     getBalance(args: { address: Address }): Promise<bigint>;
     readContract(args: {
         address: Address;
-        abi: readonly any[];
+        abi: readonly Record<string, unknown>[];
         functionName: string;
-        args?: readonly any[];
-    }): Promise<any>;
+        args?: readonly unknown[];
+    }): Promise<unknown>;
     simulateContract(args: {
         account: { address: Address };
         address: Address;
-        abi: readonly any[];
+        abi: readonly Record<string, unknown>[];
         functionName: string;
-        args: readonly any[];
-    }): Promise<{ request: any }>;
-    waitForTransactionReceipt(args: { hash: Hash }): Promise<any>;
+        args: readonly unknown[];
+    }): Promise<{ request: Record<string, unknown> }>;
+    waitForTransactionReceipt(args: { hash: Hash }): Promise<Record<string, unknown>>;
     getBlockNumber(): Promise<bigint>;
 }
 
@@ -105,9 +104,11 @@ export interface QueuedTransaction {
     token: "ETH" | "USDC";
     memo?: string;
     createdAt: Date;
-    status: "pending" | "processing" | "completed" | "failed";
+    status: "pending" | "processing" | "completed" | "failed" | "dead_letter";
     retryCount: number;
     lastError?: string;
+    deadLetterReason?: string;
+    deadLetteredAt?: Date;
 }
 
 /**
@@ -145,4 +146,80 @@ export interface HealthStatus {
     lastBlockNumber?: bigint;
     circuitBreakerState: CircuitState;
     pendingTransactions: number;
+}
+
+// ── Production-Grade Additions (v1.6.0) ──
+
+/**
+ * Standardized API error response with correlation ID for tracing.
+ */
+export interface ApiErrorResponse {
+    error: {
+        code: string;
+        message: string;
+        correlationId: string;
+        timestamp: string;
+        details?: Record<string, unknown>;
+    };
+}
+
+/**
+ * Secrets provider interface for secure key management.
+ * Implementations: EnvSecretsProvider, AwsKmsSecretsProvider, HashiCorpVaultSecretsProvider.
+ */
+export interface SecretsProvider {
+    /** Retrieves the private key for signing. Never logged or exposed in plaintext. */
+    getPrivateKey(): Promise<`0x${string}`>;
+    /** Retrieves an arbitrary secret by name. */
+    getSecret(name: string): Promise<string>;
+    /** Whether this provider is healthy and reachable. */
+    healthCheck(): Promise<boolean>;
+}
+
+/**
+ * Tracing span context for OpenTelemetry-compatible distributed tracing.
+ */
+export interface TraceSpan {
+    /** Start a child span. */
+    startSpan(name: string, attributes?: Record<string, string | number | boolean>): TraceSpan;
+    /** Set a single attribute on the span. */
+    setAttribute(key: string, value: string | number | boolean): void;
+    /** Record an exception on the span. */
+    recordException(error: Error): void;
+    /** Mark the span as successful and end it. */
+    end(): void;
+    /** Mark the span as errored and end it. */
+    endWithError(error: Error): void;
+}
+
+/**
+ * Tracer interface for creating spans.
+ */
+export interface Tracer {
+    /** Start a new root span. */
+    startSpan(name: string, attributes?: Record<string, string | number | boolean>): TraceSpan;
+}
+
+/**
+ * Dead letter queue entry for permanently failed transactions.
+ */
+export interface DeadLetterEntry {
+    transaction: QueuedTransaction;
+    failedAt: Date;
+    reason: string;
+    retriesExhausted: number;
+}
+
+/**
+ * Dead letter queue interface for storing permanently failed transactions.
+ */
+export interface DeadLetterQueue {
+    /** Push a failed transaction to the dead letter queue. */
+    push(entry: DeadLetterEntry): Promise<void>;
+    /** List all dead letter entries. */
+    list(limit?: number): Promise<DeadLetterEntry[]>;
+    /** Retry a dead letter entry (removes from DLQ if successful). */
+    remove(id: string): Promise<void>;
+    /** Get the count of dead letter entries. */
+    count(): Promise<number>;
 }
