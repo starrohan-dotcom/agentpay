@@ -34,6 +34,7 @@ export const PayOptionsSchema = z.object({
   amount: z.number().positive(),
   token: z.enum(["ETH", "USDC"]).optional().default("ETH"),
   memo: z.string().optional(),
+  idempotencyKey: z.string().uuid().optional(),
 });
 
 export type PayOptions = {
@@ -41,4 +42,16 @@ export type PayOptions = {
   amount: number;
   token?: "ETH" | "USDC";
   memo?: string;
+  idempotencyKey?: string;
 };
+
+export const HealthStatusSchema = z.object({
+  status: z.enum(["healthy", "degraded", "unhealthy"]),
+  uptime: z.number(),
+  rpcConnected: z.boolean(),
+  walletInitialized: z.boolean(),
+  chainId: z.number().optional(),
+  lastBlockNumber: z.bigint().optional(),
+});
+
+export type HealthStatus = z.infer<typeof HealthStatusSchema>;

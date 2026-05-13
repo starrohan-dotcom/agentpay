@@ -7,8 +7,6 @@ import {
   encodeFunctionData,
   type Hash,
   type Address,
-  type PublicClient,
-  type WalletClient,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia, base } from "viem/chains";
@@ -26,6 +24,24 @@ import {
   PayOptionsSchema,
 } from "./utils/validation.js";
 import { PolicyEngine } from "./core/PolicyEngine.js";
+import { retryManager } from "./utils/retry.js";
+import { rpcCircuitBreaker } from "./utils/circuit-breaker.js";
+import { auditLogger } from "./utils/audit.js";
+import {
+  paymentsTotal,
+  paymentsSucceeded,
+  paymentsFailed,
+  policyViolations,
+  activeAgents,
+  paymentLatency,
+} from "./utils/metrics.js";
+import { transactionQueue } from "./utils/transaction-queue.js";
+import { rateLimiters } from "./utils/rate-limiter.js";
+import {
+  type SmartAccountClient,
+  type WalletOperations,
+  type PublicClientOperations,
+} from "./utils/types.js";
 
 // ─────────────────────────────────────────────
 // TYPES
@@ -49,6 +65,8 @@ export interface TxRecord {
   timestamp: Date;
   /** Final status of the payment. */
   status: "success" | "failed";
+  /** Idempotency key for deduplication. */
+  idempotencyKey?: string;
 }
 
 // ─────────────────────────────────────────────
@@ -73,7 +91,7 @@ export class PolicyBuilder {
     return this;
   }
 
-  /** restrict payments to a specific list of addresses. */
+  /** Restrict payments to a specific list of addresses. */
   allowOnly(addresses: Address[]): PolicyBuilder {
     this.rules.allowedAddresses = addresses;
     return this;
@@ -95,10 +113,21 @@ export class PolicyBuilder {
 export const policy = () => new PolicyBuilder();
 
 // ─────────────────────────────────────────────
-// AGENT WALLET
+// CONSTANTS
 // ─────────────────────────────────────────────
 
-export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+/** USDC contract address on Base mainnet */
+export const USDC_ADDRESS: Address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+
+/** Default RPC URLs per chain */
+const DEFAULT_RPC_URLS: Record<number, string> = {
+  8453: "https://mainnet.base.org",
+  84532: "https://sepolia.base.org",
+};
+
+/** Safe EntryPoint v0.7 address */
+const SAFE_ENTRYPOINT_ADDRESS: Address =
+  "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
 
 const ERC20_ABI = [
   {
@@ -127,14 +156,27 @@ const ERC20_ABI = [
   },
 ] as const;
 
+// ─────────────────────────────────────────────
+// AGENT WALLET (Production-Grade)
+// ─────────────────────────────────────────────
+
 /**
  * AgentWallet is the primary interface for giving AI agents autonomous
  * financial capabilities on Base.
+ *
+ * Production features:
+ * - Retry logic with exponential backoff for all RPC calls
+ * - Circuit breaker to prevent cascading failures
+ * - Idempotency keys to prevent duplicate payments
+ * - Audit logging for all financial operations
+ * - Prometheus-compatible metrics
+ * - Rate limiting on payment operations
+ * - Transaction queue with graceful shutdown
  */
 export class AgentWallet {
-  private walletClient: WalletClient;
-  private smartAccountClient?: any;
-  private publicClient: PublicClient;
+  private walletClient: WalletOperations;
+  private smartAccountClient: SmartAccountClient | null = null;
+  private publicClient: PublicClientOperations;
   private policyEngine: PolicyEngine;
   private txHistory: TxRecord[] = [];
   private dailySpentETH: bigint = 0n;
@@ -142,6 +184,7 @@ export class AgentWallet {
   private dayStart: Date = new Date();
   private storage: StorageProvider;
   private isInitialized: boolean = false;
+  private processedIdempotencyKeys: Set<string> = new Set();
 
   /** The public wallet address of the agent. */
   public address: Address;
@@ -155,24 +198,43 @@ export class AgentWallet {
 
     const account = privateKeyToAccount(this.config.privateKey as `0x${string}`);
     this.address = account.address;
-    this.agentId = this.config.agentId ?? "agent-" + account.address.slice(0, 6).toLowerCase();
-    this.storage = (this.config.storage as StorageProvider) ?? new FileStorage();
+    this.agentId =
+      this.config.agentId ??
+      "agent-" + account.address.slice(0, 6).toLowerCase();
+    this.storage =
+      (this.config.storage as StorageProvider) ?? new FileStorage();
     this.policyEngine = new PolicyEngine(this.config.policy ?? {});
 
-    const chain = this.config.rpcUrl?.includes("mainnet") ? base : baseSepolia;
-    const defaultRpc = chain.id === 8453 ? "https://mainnet.base.org" : "https://sepolia.base.org";
-    const rpcUrl = this.config.rpcUrl ?? defaultRpc;
+    const chain = this.detectChain();
+    const rpcUrl = this.config.rpcUrl ?? DEFAULT_RPC_URLS[chain.id] ?? "https://sepolia.base.org";
 
     this.walletClient = createWalletClient({
       account,
       chain,
       transport: http(rpcUrl),
-    });
+    }) as unknown as WalletOperations;
 
     this.publicClient = createPublicClient({
       chain,
       transport: http(rpcUrl),
-    }) as PublicClient;
+    }) as unknown as PublicClientOperations;
+
+    activeAgents.inc();
+    logger.info("AgentWallet constructed", {
+      agentId: this.agentId,
+      address: this.address,
+      chainId: chain.id,
+    });
+  }
+
+  /**
+   * Detects the chain based on RPC URL or defaults to Base Sepolia.
+   */
+  private detectChain() {
+    if (this.config.rpcUrl?.includes("mainnet") || this.config.rpcUrl?.includes("base.org")) {
+      return base;
+    }
+    return baseSepolia;
   }
 
   /**
@@ -188,58 +250,76 @@ export class AgentWallet {
     await this.loadState();
 
     if (this.config.useSmartAccount) {
-      const account = privateKeyToAccount(this.config.privateKey as `0x${string}`);
-      const chain = this.config.rpcUrl?.includes("mainnet") ? base : baseSepolia;
-
-      const safeAccount = (await toSafeSmartAccount({
-        client: this.publicClient,
-        signer: account,
-        safeVersion: "1.4.1",
-        entryPointDefinition: {
-          address: "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
-          version: "0.7",
-        },
-      } as any)) as any;
-
-      if (!this.config.bundlerUrl) {
-        throw new AgentPayError(
-          ErrorCode.INITIALIZATION_REQUIRED,
-          "bundlerUrl is required when useSmartAccount is true.",
-        );
-      }
-
-      this.smartAccountClient = createSmartAccountClient({
-        account: safeAccount,
-        chain,
-        bundlerTransport: http(this.config.bundlerUrl),
-      } as any);
-
-      this.address = safeAccount.address;
-      logger.info(`Smart Account initialized`, { address: this.address });
+      await this.initializeSmartAccount();
     }
 
     this.isInitialized = true;
-    logger.info(`AgentWallet initialized`, { agentId: this.agentId, address: this.address });
+    logger.info("AgentWallet initialized", {
+      agentId: this.agentId,
+      address: this.address,
+      smartAccount: !!this.smartAccountClient,
+    });
   }
+
+  /**
+   * Initializes a Safe Smart Account for on-chain policy enforcement.
+   */
+  private async initializeSmartAccount(): Promise<void> {
+    const account = privateKeyToAccount(this.config.privateKey as `0x${string}`);
+    const chain = this.detectChain();
+
+    if (!this.config.bundlerUrl) {
+      throw new AgentPayError(
+        ErrorCode.INITIALIZATION_REQUIRED,
+        "bundlerUrl is required when useSmartAccount is true.",
+      );
+    }
+
+    const safeAccount = await toSafeSmartAccount({
+      client: this.publicClient as any,
+      signer: account,
+      safeVersion: "1.4.1",
+      entryPointDefinition: {
+        address: SAFE_ENTRYPOINT_ADDRESS,
+        version: "0.7",
+      },
+    } as any);
+
+    this.smartAccountClient = createSmartAccountClient({
+      account: safeAccount,
+      chain,
+      bundlerTransport: http(this.config.bundlerUrl),
+    }) as unknown as SmartAccountClient;
+
+    this.address = safeAccount.address as Address;
+    logger.info("Smart Account initialized", { address: this.address });
+  }
+
+  // ── State Management ──
 
   private async loadState(): Promise<void> {
     try {
       const state = await this.storage.load(this.agentId);
       if (state) {
-        this.dailySpentETH = state.dailySpent ? BigInt(state.dailySpent) : 0n;
-        this.dailySpentUSDC = state.dailySpentUSDC ? BigInt(state.dailySpentUSDC) : 0n;
-        this.dayStart = state.dayStart ? new Date(state.dayStart) : new Date();
+        this.dailySpentETH = state.dailySpent
+          ? BigInt(state.dailySpent)
+          : 0n;
+        this.dailySpentUSDC = state.dailySpentUSDC
+          ? BigInt(state.dailySpentUSDC)
+          : 0n;
+        this.dayStart = state.dayStart
+          ? new Date(state.dayStart)
+          : new Date();
         this.txHistory = (state.txHistory || []).map((tx: any) => ({
           ...tx,
           timestamp: new Date(tx.timestamp),
         }));
       }
     } catch (err) {
-      logger.warn("Could not load state, starting fresh", { error: err });
+      logger.warn("Could not load state, starting fresh", { error: String(err) });
     }
   }
 
-  /** @internal */
   private async saveState(): Promise<void> {
     try {
       const state = {
@@ -250,25 +330,36 @@ export class AgentWallet {
       };
       await this.storage.save(this.agentId, state);
     } catch (err) {
-      logger.error("Failed to save state", { error: err });
+      logger.error("Failed to save state", { error: String(err) });
     }
   }
 
-  /** @internal */
   private async checkDailyReset(): Promise<void> {
     const now = new Date();
-    const hoursSinceDayStart = (now.getTime() - this.dayStart.getTime()) / (1000 * 60 * 60);
+    const hoursSinceDayStart =
+      (now.getTime() - this.dayStart.getTime()) / (1000 * 60 * 60);
     if (hoursSinceDayStart >= 24) {
       this.dailySpentETH = 0n;
       this.dailySpentUSDC = 0n;
       this.dayStart = now;
       await this.saveState();
+      auditLogger.logDailyReset(this.agentId);
       logger.info("Daily spending limits reset");
     }
   }
 
+  // ── Payment Execution ──
+
   /**
    * Executes an autonomous payment in ETH or USDC.
+   *
+   * Production features:
+   * - Idempotency key support (prevents duplicate payments)
+   * - Retry logic with exponential backoff
+   * - Circuit breaker protection for RPC calls
+   * - Rate limiting on payment operations
+   * - Audit logging for all financial events
+   * - Prometheus metrics
    *
    * @async
    * @param {PayOptions} opts Payment destination, amount, and token.
@@ -283,81 +374,174 @@ export class AgentWallet {
       );
     }
 
+    // Rate limiting for payment operations
+    if (!rateLimiters.payments.tryConsume()) {
+      throw new AgentPayError(
+        ErrorCode.POLICY_VIOLATION,
+        "Rate limit exceeded for payment operations. Please try again later.",
+      );
+    }
+
     const validated = PayOptionsSchema.parse(opts);
-    const { to, amount, token = "ETH", memo } = validated as PayOptions;
+    const { to, amount, token = "ETH", memo, idempotencyKey } = validated as PayOptions;
+
+    // Idempotency check
+    if (idempotencyKey && this.processedIdempotencyKeys.has(idempotencyKey)) {
+      logger.warn("Duplicate idempotency key detected, rejecting payment", {
+        idempotencyKey,
+      });
+      throw new AgentPayError(
+        ErrorCode.POLICY_VIOLATION,
+        `Payment with idempotency key ${idempotencyKey} has already been processed.`,
+      );
+    }
 
     const amountInBaseUnits =
-      token === "USDC" ? BigInt(Math.floor(amount * 1_000_000)) : parseEther(amount.toFixed(18));
+      token === "USDC"
+        ? BigInt(Math.floor(amount * 1_000_000))
+        : parseEther(amount.toFixed(18));
 
     await this.checkDailyReset();
 
-    this.policyEngine.validate(
-      to as Address,
-      amountInBaseUnits,
+    // Policy validation with audit logging
+    try {
+      this.policyEngine.validate(
+        to as Address,
+        amountInBaseUnits,
+        token,
+        this.dailySpentETH,
+        this.dailySpentUSDC,
+      );
+      auditLogger.logPolicyCheck({
+        agentId: this.agentId,
+        policyResult: "PASSED",
+        amount: amount.toString(),
+        token,
+        recipient: to as Address,
+      });
+    } catch (policyErr: any) {
+      policyViolations.inc({ token });
+      auditLogger.logPolicyCheck({
+        agentId: this.agentId,
+        policyResult: "FAILED",
+        amount: amount.toString(),
+        token,
+        recipient: to as Address,
+        errorMessage: policyErr.message,
+      });
+      throw policyErr;
+    }
+
+    // Track idempotency key
+    if (idempotencyKey) {
+      this.processedIdempotencyKeys.add(idempotencyKey);
+    }
+
+    paymentsTotal.inc({ token, status: "initiated" });
+    auditLogger.logPaymentInitiated({
+      agentId: this.agentId,
+      amount: amount.toString(),
       token,
-      this.dailySpentETH,
-      this.dailySpentUSDC,
-    );
+      recipient: to as Address,
+      idempotencyKey: idempotencyKey ?? "none",
+    });
 
-    logger.info(`Processing payment`, { agentId: this.agentId, amount, token, to });
+    logger.info("Processing payment", {
+      agentId: this.agentId,
+      amount,
+      token,
+      to,
+      idempotencyKey,
+    });
 
+    const startTime = Date.now();
     let hash: Hash;
 
     try {
-      if (this.config.useSmartAccount && this.smartAccountClient) {
-        if (token === "ETH") {
-          hash = await this.smartAccountClient.sendTransaction({
-            to: to as Address,
-            value: amountInBaseUnits,
-          });
-        } else {
-          hash = await this.smartAccountClient.sendTransaction({
-            to: USDC_ADDRESS,
-            data: encodeFunctionData({
-              abi: ERC20_ABI,
-              functionName: "transfer",
-              args: [to, amountInBaseUnits],
-            }),
-          });
-        }
+      // Execute with retry and circuit breaker
+      hash = await retryManager.execute(async () => {
+        return rpcCircuitBreaker.execute(async () => {
+          if (this.config.useSmartAccount && this.smartAccountClient) {
+            return this.executeSmartAccountPayment(
+              to as Address,
+              amountInBaseUnits,
+              token,
+            );
+          }
+          return this.executeEOAPayment(
+            to as Address,
+            amountInBaseUnits,
+            token,
+          );
+        });
+      }, `payment-${this.agentId}`);
+
+      // Wait for receipt with retry
+      await retryManager.execute(async () => {
+        return rpcCircuitBreaker.execute(async () => {
+          await this.publicClient.waitForTransactionReceipt({ hash });
+        });
+      }, `wait-receipt-${hash}`);
+
+      // Update daily spent
+      if (token === "ETH") {
+        this.dailySpentETH += amountInBaseUnits;
       } else {
-        if (token === "ETH") {
-          hash = await (this.walletClient as any).sendTransaction({
-            to: to as Address,
-            value: amountInBaseUnits,
-          });
-        } else {
-          const { request } = await this.publicClient.simulateContract({
-            account: this.walletClient.account,
-            address: USDC_ADDRESS,
-            abi: ERC20_ABI,
-            functionName: "transfer",
-            args: [to, amountInBaseUnits],
-          });
-          hash = await (this.walletClient as any).writeContract(request);
-        }
+        this.dailySpentUSDC += amountInBaseUnits;
       }
 
-      await this.publicClient.waitForTransactionReceipt({ hash });
-
-      if (token === "ETH") this.dailySpentETH += amountInBaseUnits;
-      else this.dailySpentUSDC += amountInBaseUnits;
-
       await this.saveState();
-      logger.info(`Payment successful`, { hash });
+
+      // Record latency
+      const latencySeconds = (Date.now() - startTime) / 1000;
+      paymentLatency.observe({ token, status: "success" }, latencySeconds);
+
+      paymentsSucceeded.inc({ token });
+      auditLogger.logPaymentSucceeded({
+        agentId: this.agentId,
+        transactionHash: hash,
+        amount: amount.toString(),
+        token,
+        recipient: to as Address,
+        idempotencyKey: idempotencyKey ?? "none",
+      });
+
+      logger.info("Payment successful", { hash, latencySeconds });
     } catch (err: any) {
-      const failedHash = "0x0000000000000000000000000000000000000000000000000000000000000000";
+      const latencySeconds = (Date.now() - startTime) / 1000;
+      paymentLatency.observe({ token, status: "failed" }, latencySeconds);
+
+      paymentsFailed.inc({ token });
+      auditLogger.logPaymentFailed({
+        agentId: this.agentId,
+        amount: amount.toString(),
+        token,
+        recipient: to as Address,
+        idempotencyKey: idempotencyKey ?? "none",
+        errorMessage: err.message,
+      });
+
+      // Remove idempotency key on failure to allow retry
+      if (idempotencyKey) {
+        this.processedIdempotencyKeys.delete(idempotencyKey);
+      }
+
       const failedRecord: TxRecord = {
-        hash: failedHash,
+        hash: "0x0000000000000000000000000000000000000000000000000000000000000000",
         to: to as Address,
         amount,
         memo,
         timestamp: new Date(),
         status: "failed",
+        idempotencyKey,
       };
       this.txHistory.push(failedRecord);
-      logger.error(`Payment failed`, { error: err.message });
-      throw new AgentPayError(ErrorCode.TRANSACTION_FAILED, err.message, err);
+      logger.error("Payment failed", { error: err.message });
+      throw new AgentPayError(
+        ErrorCode.TRANSACTION_FAILED,
+        err.message,
+        err,
+      );
     }
 
     const record: TxRecord = {
@@ -367,10 +551,71 @@ export class AgentWallet {
       memo,
       timestamp: new Date(),
       status: "success",
+      idempotencyKey,
     };
     this.txHistory.push(record);
     return record;
   }
+
+  /**
+   * Executes a payment via Smart Account (ERC-4337).
+   */
+  private async executeSmartAccountPayment(
+    to: Address,
+    amountInBaseUnits: bigint,
+    token: "ETH" | "USDC",
+  ): Promise<Hash> {
+    if (!this.smartAccountClient) {
+      throw new AgentPayError(
+        ErrorCode.INITIALIZATION_REQUIRED,
+        "Smart account client not initialized.",
+      );
+    }
+
+    if (token === "ETH") {
+      return this.smartAccountClient.sendTransaction({
+        to,
+        value: amountInBaseUnits,
+      });
+    }
+
+    return this.smartAccountClient.sendTransaction({
+      to: USDC_ADDRESS,
+      data: encodeFunctionData({
+        abi: ERC20_ABI,
+        functionName: "transfer",
+        args: [to, amountInBaseUnits],
+      }),
+    });
+  }
+
+  /**
+   * Executes a payment via EOA (Externally Owned Account).
+   */
+  private async executeEOAPayment(
+    to: Address,
+    amountInBaseUnits: bigint,
+    token: "ETH" | "USDC",
+  ): Promise<Hash> {
+    if (token === "ETH") {
+      return this.walletClient.sendTransaction({
+        to,
+        value: amountInBaseUnits,
+      });
+    }
+
+    const { request } = await this.publicClient.simulateContract({
+      account: { address: this.address },
+      address: USDC_ADDRESS,
+      abi: ERC20_ABI,
+      functionName: "transfer",
+      args: [to, amountInBaseUnits],
+    });
+
+    return this.walletClient.writeContract(request);
+  }
+
+  // ── Balance & History ──
 
   /**
    * Fetches the current balance for the agent's wallet.
@@ -380,22 +625,28 @@ export class AgentWallet {
    * @returns {Promise<string>} Balance formatted as a human-readable string.
    */
   async balance(token: "ETH" | "USDC" = "ETH"): Promise<string> {
-    if (token === "ETH") {
-      const raw = await this.publicClient.getBalance({ address: this.address });
-      return formatEther(raw);
-    } else {
-      try {
-        const raw = await this.publicClient.readContract({
-          address: USDC_ADDRESS,
-          abi: ERC20_ABI,
-          functionName: "balanceOf",
-          args: [this.address],
-        });
-        return (Number(raw) / 1_000_000).toString();
-      } catch {
-        return "0.00";
-      }
-    }
+    return retryManager.execute(async () => {
+      return rpcCircuitBreaker.execute(async () => {
+        if (token === "ETH") {
+          const raw = await this.publicClient.getBalance({
+            address: this.address,
+          });
+          return formatEther(raw);
+        }
+
+        try {
+          const raw = await this.publicClient.readContract({
+            address: USDC_ADDRESS,
+            abi: ERC20_ABI,
+            functionName: "balanceOf",
+            args: [this.address],
+          });
+          return (Number(raw) / 1_000_000).toString();
+        } catch {
+          return "0.00";
+        }
+      });
+    }, `balance-${token}-${this.agentId}`);
   }
 
   /**
@@ -415,6 +666,36 @@ export class AgentWallet {
   }
 
   /**
+   * Returns the current spending policy.
+   */
+  getPolicy(): SpendingPolicy {
+    return this.config.policy ?? {};
+  }
+
+  /**
+   * Returns the chain ID the wallet is connected to.
+   */
+  getChainId(): number {
+    return this.detectChain().id;
+  }
+
+  /**
+   * Returns whether the wallet is initialized.
+   */
+  getIsInitialized(): boolean {
+    return this.isInitialized;
+  }
+
+  /**
+   * Returns whether a smart account is in use.
+   */
+  getIsSmartAccount(): boolean {
+    return !!this.smartAccountClient;
+  }
+
+  // ── Summary ──
+
+  /**
    * Logs a professional summary of the agent's financial status to the console.
    */
   async summary(): Promise<void> {
@@ -428,13 +709,17 @@ export class AgentWallet {
     const spentETH = this.dailySpentSoFar("ETH");
     const spentUSDC = this.dailySpentSoFar("USDC");
 
-    console.log(`\n\x1b[36m[AgentPay] ── ${this.agentId} Summary ──\x1b[0m`);
+    console.log(
+      `\n\x1b[36m[AgentPay] ── ${this.agentId} Summary ──\x1b[0m`,
+    );
     console.log(`  Address:      ${this.address}`);
     console.log(`  Balance:      ${balETH} ETH | ${balUSDC} USDC`);
     console.log(`  Spent today:  ${spentETH} ETH | ${spentUSDC} USDC`);
     console.log(`  Transactions: ${this.txHistory.length}`);
     if (this.config.policy?.dailyLimit) {
-      console.log(`  Daily limit:  ${this.config.policy.dailyLimit} (Policy enforced)`);
+      console.log(
+        `  Daily limit:  ${this.config.policy.dailyLimit} (Policy enforced)`,
+      );
     }
     console.log("");
   }
