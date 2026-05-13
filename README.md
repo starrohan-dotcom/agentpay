@@ -3,8 +3,11 @@
 > **The Financial Protocol for the Agentic Web.** Give any AI agent a crypto wallet, spending guardrails, and transaction history in 3 lines of code.
 
 [![npm version](https://img.shields.io/npm/v/@starrohan/agentpay)](https://www.npmjs.com/package/@starrohan/agentpay)
+[![npm downloads](https://img.shields.io/npm/dm/@starrohan/agentpay)](https://www.npmjs.com/package/@starrohan/agentpay)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Built on Base](https://img.shields.io/badge/Built%20on-Base-0052FF)](https://base.org)
+[![CI/CD](https://github.com/starrohan-dotcom/agentpay/actions/workflows/ci.yml/badge.svg)](https://github.com/starrohan-dotcom/agentpay/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-70%25-brightgreen)](https://github.com/starrohan-dotcom/agentpay)
 
 ---
 

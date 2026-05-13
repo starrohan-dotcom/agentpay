@@ -2,7 +2,7 @@
 # This allows users to find and install AgentPay via the Smithery Marketplace
 
 name: agentpay
-version: 1.4.0
+version: 1.6.0
 description: The wallet protocol for AI agents. Give your agent a wallet and spending policies.
 author: starrohan
 license: MIT
