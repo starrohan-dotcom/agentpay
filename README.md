@@ -1,91 +1,88 @@
-# @starrohan/agentpay
+<p align="center">
+  <h1 align="center">💳 AgentPay</h1>
+  <p align="center"><strong>The Financial Protocol for the Agentic Web</strong></p>
+</p>
 
-> **The Financial Protocol for the Agentic Web.** Give any AI agent a crypto wallet, spending guardrails, and transaction history in 3 lines of code.
-
-[![npm version](https://img.shields.io/npm/v/@starrohan/agentpay)](https://www.npmjs.com/package/@starrohan/agentpay)
-[![npm downloads](https://img.shields.io/npm/dm/@starrohan/agentpay)](https://www.npmjs.com/package/@starrohan/agentpay)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Built on Base](https://img.shields.io/badge/Built%20on-Base-0052FF)](https://base.org)
-[![CI/CD](https://github.com/starrohan-dotcom/agentpay/actions/workflows/ci.yml/badge.svg)](https://github.com/starrohan-dotcom/agentpay/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-70%25-brightgreen)](https://github.com/starrohan-dotcom/agentpay)
-
----
-
-## 🚀 Vision
-
-AI agents can think, but they can't pay. For an agent to be truly autonomous, it must manage its own resources—compute, data, and services. AgentPay provides the secure, non-custodial economic layer for the next generation of AI.
-
-## 📦 Features
-
-- 💳 **Non-Custodial Wallets** — Agent-owned wallets with optional smart-account support.
-- 🛡️ **Spending Policies** — Max per transaction, daily limits, and allowlists.
-- 📋 **Persistent History** — Every payment logged and preserved across agent restarts.
-- 📊 **Multi-Asset** — Native support for **ETH** and **USDC** on Base.
-- 🔌 **Universal Plugins** — Drop-in support for LangChain, CrewAI, AutoGen, and MCP.
-- ⚡ **Zero Friction** — Near-zero fees and sub-second settlement via Base L2.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@starrohan/agentpay"><img src="https://img.shields.io/npm/v/@starrohan/agentpay?color=blue&label=npm" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/@starrohan/agentpay"><img src="https://img.shields.io/npm/dm/@starrohan/agentpay?color=brightgreen&label=downloads" alt="npm downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/starrohan-dotcom/agentpay?color=blue" alt="MIT License"></a>
+  <a href="https://github.com/starrohan-dotcom/agentpay/stargazers"><img src="https://img.shields.io/github/stars/starrohan-dotcom/agentpay?style=social" alt="stars"></a>
+  <a href="https://twitter.com/Rohan_busarla"><img src="https://img.shields.io/twitter/follow/Rohan_busarla?style=social" alt="Twitter"></a>
+</p>
 
 ---
 
-## 🛠️ Quickstart
+> **AI agents can think, reason, and act. But they can't pay for anything. Until now.**
 
-### 1. Initialize Project
+AgentPay gives any AI agent a crypto wallet with built-in spending guardrails — in 3 lines of code.
+
+---
+
+## ⚡ Quick Start
 
 ```bash
 npx agentpay
 ```
 
-### 2. Usage
-
 ```ts
-import "dotenv/config";
 import { AgentWallet, policy } from "@starrohan/agentpay";
 
 const agent = new AgentWallet({
   privateKey: process.env.AGENT_PRIVATE_KEY,
-  agentId: "research-agent-01",
-  policy: policy().maxTx(0.001).dailyLimit(0.01).build(),
+  agentId: "my-agent",
+  policy: policy()
+    .maxTx(0.001)       // Max per transaction
+    .dailyLimit(0.01)   // Max per day
+    .build()
 });
 
 await agent.init();
-await agent.pay({ to: "0xRECIPIENT", amount: 0.00001, memo: "API request" });
+
+// Check balance
+console.log(await agent.balance()); // "0.05 ETH"
+
+// Make a payment
+await agent.pay({
+  to: "0xRECIPIENT",
+  amount: 0.00001,
+  memo: "API request"
+});
+
+// View history
+await agent.summary();
 ```
 
 ---
 
-## 🤖 Integrations
+## 🎯 Why AgentPay?
 
-AgentPay is framework-agnostic. Give your favorite AI a wallet instantly.
-
-### Claude Desktop / MCP
-
-Supports **Model Context Protocol (MCP)**. Give Claude a wallet with zero code. [See setup guide](#-mcp-setup-guide).
-
-### Frameworks
-
-- 🦜 **LangChain:** Official `AgentPayTool` integration.
-- 🤝 **CrewAI:** Native tool generator for multi-agent teams.
-- 🤖 **AutoGen:** Standard function registration support.
+| | AgentPay | Stripe Agent SDK | Traditional |
+|---|---|---|---|
+| **Fees** | ~$0.001 (Base L2) | 2.9% + $0.30 | 3-5% |
+| **Settlement** | Sub-second | 2-7 days | 1-5 days |
+| **Global** | ✅ No borders | ❌ Country restricted | ❌ Country restricted |
+| **Programmable** | ✅ Smart contracts | ❌ | ❌ |
+| **Non-custodial** | ✅ Agent owns keys | ❌ | ❌ |
+| **Open Source** | ✅ MIT | ❌ | ❌ |
 
 ---
 
-## 🌟 Agent Showcase
+## 📦 Features
 
-Are you building something with AgentPay? [Submit a PR](https://github.com/starrohan-dotcom/agentpay/pulls) to add your project here!
-
-- **[Self-Sustaining Researcher]** — An agent that pays for its own OpenAI usage.
-- **[LangChain Wallet Agent]** — A basic agent with autonomous payment skills.
+- 💳 **Non-Custodial Wallets** — Agent-owned keys. Optional Safe Smart Accounts.
+- 🛡️ **Spending Guardrails** — Max per tx, daily limits, recipient allowlists.
+- 📋 **Transaction History** — Every payment logged. Survives restarts.
+- 📊 **Multi-Asset** — ETH + USDC on Base. More chains coming.
+- 🔌 **Framework Agnostic** — LangChain, CrewAI, AutoGen, MCP.
+- ⚡ **Base L2** — Near-zero fees. Sub-second finality.
+- 🏭 **Production Ready** — Circuit breakers, rate limiters, Redis/Postgres, Prometheus.
 
 ---
 
-## 🛠 MCP Setup Guide
+## 🤖 Works With Everything
 
-Give your Claude Desktop AI a wallet in 60 seconds.
-
-1.  **Open your Claude Desktop config:**
-    - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-    - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-
-2.  **Add AgentPay to the `mcpServers` list:**
+### Claude Desktop (MCP)
 
 ```json
 {
@@ -94,43 +91,109 @@ Give your Claude Desktop AI a wallet in 60 seconds.
       "command": "npx",
       "args": ["-y", "@starrohan/agentpay", "mcp"],
       "env": {
-        "AGENT_PRIVATE_KEY": "0xYOUR_PRIVATE_KEY_HERE",
-        "RPC_URL": "https://sepolia.base.org",
-        "USE_SMART_ACCOUNT": "true",
-        "BUNDLER_URL": "https://api.pimlico.io/v2/base-sepolia/rpc?apikey=YOUR_API_KEY"
+        "AGENT_PRIVATE_KEY": "0xYOUR_KEY",
+        "RPC_URL": "https://sepolia.base.org"
       }
     }
   }
 }
 ```
 
-### Advanced Config
+Restart Claude. Ask: *"What's my wallet balance?"*
 
-| Env Var                       | Description                                                                       |
-| ----------------------------- | --------------------------------------------------------------------------------- |
-| `AGENT_PRIVATE_KEY`           | Hex-encoded private key (starts with 0x)                                          |
-| `RPC_URL`                     | Base or Base Sepolia RPC URL                                                      |
-| `USE_SMART_ACCOUNT`           | Set to `true` to use Safe Smart Accounts                                          |
-| `BUNDLER_URL`                 | ERC-4337 Bundler URL (Required if `USE_SMART_ACCOUNT` is true)                    |
-| `AGENT_ID`                    | Custom identifier for state persistence                                           |
-| `AGENTPAY_ENABLE_PAYMENTS`    | Set to `true` to expose and execute `send_payment`; omitted by default for safety |
-| `AGENTPAY_ALLOWED_RECIPIENTS` | Optional comma-separated address allowlist for MCP payments                       |
-| `AGENTPAY_MCP_AUTH_TOKEN`     | Optional bearer token required by hosted SSE MCP endpoints                        |
+### LangChain
 
-By default, the MCP server exposes balance and summary tools only. To allow an AI client to send funds, set `AGENTPAY_ENABLE_PAYMENTS=true`. For hosted or shared environments, also set `AGENTPAY_ALLOWED_RECIPIENTS` to a comma-separated list of approved recipient addresses and protect SSE endpoints with `AGENTPAY_MCP_AUTH_TOKEN`.
+```ts
+import { AgentPayTool } from "@starrohan/agentpay/langchain";
+const tools = [new AgentPayTool({ wallet: agent })];
+```
 
-3.  **Restart Claude.** You will now see a 💳 icon. Ask Claude: _"What is my wallet balance?"_
+### CrewAI
+
+```ts
+import { createAgentPayTools } from "@starrohan/agentpay/crewai";
+const tools = createAgentPayTools({ wallet: agent });
+```
+
+### AutoGen
+
+```ts
+import { registerAgentPay } from "@starrohan/agentpay/autogen";
+registerAgentPay({ wallet: agent });
+```
+
+---
+
+## 🏗 Architecture
+
+```
+┌──────────────────────────────────────────┐
+│              Your AI Agent                │
+│   (LangChain / CrewAI / Claude / MCP)    │
+└────────────────┬─────────────────────────┘
+                 │
+┌────────────────▼─────────────────────────┐
+│            AgentPay SDK                   │
+│  ┌──────────┐ ┌────────┐ ┌───────────┐  │
+│  │  Wallet  │ │ Policy │ │  History  │  │
+│  │  Manager │ │ Engine │ │  Ledger   │  │
+│  └──────────┘ └────────┘ └───────────┘  │
+│  ┌──────────┐ ┌────────┐ ┌───────────┐  │
+│  │  Smart   │ │Circuit │ │   Rate    │  │
+│  │ Accounts │ │Breaker │ │  Limiter  │  │
+│  └──────────┘ └────────┘ └───────────┘  │
+└────────────────┬─────────────────────────┘
+                 │
+┌────────────────▼─────────────────────────┐
+│              Base L2                      │
+│     Near-zero fees · Sub-second · Global  │
+└──────────────────────────────────────────┘
+```
+
+---
+
+## 🛠 Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AGENT_PRIVATE_KEY` | Hex-encoded private key (`0x...`) | Required |
+| `RPC_URL` | Base or Base Sepolia RPC | `https://sepolia.base.org` |
+| `USE_SMART_ACCOUNT` | Enable Safe Smart Accounts | `false` |
+| `BUNDLER_URL` | ERC-4337 Bundler (for smart accounts) | — |
+| `AGENTPAY_ENABLE_PAYMENTS` | Enable MCP payment execution | `false` |
+| `AGENTPAY_ALLOWED_RECIPIENTS` | Address allowlist (comma-separated) | — |
+
+---
+
+## 🌟 Built With AgentPay
+
+| Project | Description |
+|---------|-------------|
+| [Self-Sustaining Researcher](examples/researcher) | Agent pays for its own OpenAI API usage |
+| [LangChain Wallet Agent](examples/langchain) | Autonomous agent with payment skills |
+
+*Built something? Submit a PR to add it here!*
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. Good first issues are tagged.
+
+---
 
 ## 🛡️ Security
 
-Security is our top priority. If you find a vulnerability, please report it via the process in our [SECURITY.md](SECURITY.md).
+Report vulnerabilities via [SECURITY.md](SECURITY.md). Audit: pending (Trail of Bits).
+
+---
 
 ## 📄 License
 
-MIT © [starrohan](https://github.com/starrohan)
+MIT © [starrohan](https://github.com/starrohan-dotcom) · [@Rohan_busarla](https://twitter.com/Rohan_busarla)
+
+---
+
+<p align="center">
+  <strong>⭐ Star this repo if you believe AI agents deserve their own wallets.</strong>
+</p>
