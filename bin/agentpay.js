@@ -2,13 +2,17 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-let version = "1.4.0";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+let version = "1.6.0";
 try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
     version = pkg.version;
 } catch (e) {
-    // Fallback to default version if package.json not found in cwd
+    // Fallback to default version if package.json not found
 }
 
 console.log(`
